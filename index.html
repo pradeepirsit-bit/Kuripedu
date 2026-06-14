@@ -14,6 +14,8 @@
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     <!-- QR Code -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- y-quill binding -->
+    <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -58,8 +60,9 @@
         body.deep-work .sync-panel,
         body.deep-work .status-bar,
         body.deep-work .collab-bar,
-        body.deep-work .editor-wrapper > div:last-child, /* table insert button wrapper */
-        body.deep-work .table-inline-toolbar {
+        body.deep-work .editor-wrapper > div:last-child,
+        body.deep-work .table-inline-toolbar,
+        body.deep-work .ql-toolbar {
             display: none !important;
         }
         body.deep-work .editor-wrapper {
@@ -67,9 +70,6 @@
         }
         body.deep-work #quillEditor {
             min-height: 100vh !important;
-        }
-        body.deep-work .ql-toolbar {
-            display: none !important;
         }
         body.deep-work .ql-container {
             border: none !important;
@@ -84,15 +84,10 @@
             border: none !important;
             box-shadow: none !important;
         }
-        body.deep-work .reading-view {
-            display: none !important;
-        }
-        /* keep table buttons hidden during deep work */
         body.deep-work .simple-table-wrapper .table-inline-toolbar {
             display: none !important;
         }
-        
-        /* reading mode (existing) */
+        /* reading mode */
         body.read-mode .editor-container,
         body.read-mode .ql-toolbar,
         body.read-mode .custom-toolbar,
@@ -198,10 +193,6 @@
             gap: 0.4rem;
             margin-top: 0.5rem;
             justify-content: flex-end;
-        }
-        .table-inline-toolbar button {
-            font-size: 0.7rem;
-            padding: 0.2rem 0.6rem;
         }
         .status-bar, .collab-bar {
             padding: 0.5rem 1.8rem;
@@ -336,446 +327,359 @@
     <div class="reading-view" id="readingView"></div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
 <script>
-    // ------------------------------
-    // 1. Custom Blot: Smooth Table Editing (no re-render on input)
-    // ------------------------------
-    const BlockEmbed = Quill.import('blots/block/embed');
-    
-    class SmoothTableBlot extends BlockEmbed {
-        static create(data) {
-            const node = super.create();
-            node.classList.add('simple-table-wrapper');
-            node.setAttribute('data-table-id', 'tbl-' + Date.now() + '-' + Math.random());
-            this.renderTable(node, data);
-            return node;
-        }
-        
-        static renderTable(container, data) {
-            const rows = data.rows || 2;
-            const cols = data.cols || 2;
-            const hasHeader = data.hasHeader !== undefined ? data.hasHeader : true;
-            const headers = data.headers || (hasHeader ? Array(cols).fill().map((_, i) => `Header ${i+1}`) : []);
-            const values = data.values || Array(rows).fill().map(() => Array(cols).fill(''));
-            
-            let html = `<table class="simple-table" contenteditable="false">`;
-            
-            if (hasHeader && headers.length === cols) {
-                html += `<thead><tr>`;
-                for (let c=0; c<cols; c++) {
-                    const headerVal = headers[c] !== undefined ? headers[c] : `Header ${c+1}`;
-                    html += `<th contenteditable="true" data-col="${c}">${escapeHtml(String(headerVal))}</th>`;
-                }
-                html += `</thead>`;
+    (function() {
+        // ---------- 1. Quill init ----------
+        const quill = new Quill('#quillEditor', {
+            theme: 'snow',
+            placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is smooth.',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1,2,3,false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                    ['link', 'image', 'code-block'],
+                    ['clean']
+                ]
             }
-            
-            html += `<tbody>`;
-            for (let i=0; i<rows; i++) {
-                html += `<tr>`;
-                for (let j=0; j<cols; j++) {
-                    const cellValue = (values[i] && values[i][j] !== undefined) ? values[i][j] : '';
-                    html += `<td contenteditable="true" data-row="${i}" data-col="${j}">${escapeHtml(String(cellValue))}</td>`;
-                }
-                html += `</tr>`;
+        });
+
+        // Drag & drop images
+        const editorDiv = document.querySelector('#quillEditor');
+        editorDiv.addEventListener('dragover', (e) => e.preventDefault());
+        editorDiv.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const files = e.dataTransfer.files;
+            if (files && files[0] && files[0].type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const range = quill.getSelection(true);
+                    quill.insertEmbed(range.index, 'image', ev.target.result);
+                };
+                reader.readAsDataURL(files[0]);
             }
-            html += `</tbody></td><div class="table-inline-toolbar">
-                        <button class="add-table-row">➕ Add Row</button>
-                        <button class="add-table-col">➕ Add Column</button>
-                    </div>`;
-            container.innerHTML = html;
-            
-            const getCurrentData = () => {
+        });
+
+        // ---------- 2. Custom table blot (smooth editing, no re-render on input) ----------
+        const BlockEmbed = Quill.import('blots/block/embed');
+        class SmoothTableBlot extends BlockEmbed {
+            static create(data) {
+                const node = super.create();
+                node.classList.add('simple-table-wrapper');
+                node.setAttribute('data-table-id', 'tbl-' + Date.now() + '-' + Math.random());
+                this.renderTable(node, data);
+                return node;
+            }
+            static renderTable(container, data) {
+                const rows = data.rows || 2;
+                const cols = data.cols || 2;
+                const hasHeader = data.hasHeader !== undefined ? data.hasHeader : true;
+                const headers = data.headers || (hasHeader ? Array(cols).fill().map((_, i) => `Header ${i+1}`) : []);
+                const values = data.values || Array(rows).fill().map(() => Array(cols).fill(''));
+                let html = `<table class="simple-table" contenteditable="false">`;
+                if (hasHeader && headers.length === cols) {
+                    html += `<thead></tr>`;
+                    for (let c=0; c<cols; c++) {
+                        html += `<th contenteditable="true" data-col="${c}">${escapeHtml(String(headers[c]))}</th>`;
+                    }
+                    html += `</thead>`;
+                }
+                html += `<tbody>`;
+                for (let i=0; i<rows; i++) {
+                    html += `<tr>`;
+                    for (let j=0; j<cols; j++) {
+                        const cellValue = (values[i] && values[i][j] !== undefined) ? values[i][j] : '';
+                        html += `<td contenteditable="true" data-row="${i}" data-col="${j}">${escapeHtml(String(cellValue))}</td>`;
+                    }
+                    html += `</tr>`;
+                }
+                html += `</tbody></table><div class="table-inline-toolbar">
+                            <button class="add-table-row">➕ Add Row</button>
+                            <button class="add-table-col">➕ Add Column</button>
+                        </div>`;
+                container.innerHTML = html;
+                const getCurrentData = () => {
+                    const table = container.querySelector('.simple-table');
+                    if (!table) return { rows, cols, hasHeader, headers, values };
+                    const currentRows = table.querySelectorAll('tbody tr').length;
+                    const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
+                    const hasHeaderNow = (table.querySelector('thead') !== null);
+                    let currentHeaders = [];
+                    if (hasHeaderNow) {
+                        table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
+                    }
+                    const currentValues = [];
+                    for (let i=0; i<currentRows; i++) {
+                        const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
+                        const rowVals = [];
+                        for (let j=0; j<currentCols; j++) {
+                            rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
+                        }
+                        currentValues.push(rowVals);
+                    }
+                    return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
+                };
+                const syncDataWithoutRender = () => {
+                    const newData = getCurrentData();
+                    const blot = Quill.find(container);
+                    if (blot) {
+                        blot.storedData = newData;
+                        blot.updateData(newData, { skipRender: true });
+                    }
+                };
+                const editableCells = container.querySelectorAll('[contenteditable="true"]');
+                editableCells.forEach(cell => {
+                    cell.removeEventListener('blur', syncDataWithoutRender);
+                    cell.addEventListener('blur', syncDataWithoutRender);
+                });
+                const addRowBtn = container.querySelector('.add-table-row');
+                const addColBtn = container.querySelector('.add-table-col');
+                if (addRowBtn) {
+                    addRowBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        let curr = getCurrentData();
+                        curr.rows++;
+                        curr.values.push(new Array(curr.cols).fill(''));
+                        SmoothTableBlot.renderTable(container, curr);
+                        SmoothTableBlot.notifyUpdate(container, curr);
+                    };
+                }
+                if (addColBtn) {
+                    addColBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        let curr = getCurrentData();
+                        curr.cols++;
+                        if (curr.hasHeader) curr.headers.push(`Header ${curr.cols}`);
+                        for (let i=0; i<curr.rows; i++) curr.values[i].push('');
+                        SmoothTableBlot.renderTable(container, curr);
+                        SmoothTableBlot.notifyUpdate(container, curr);
+                    };
+                }
+            }
+            static notifyUpdate(container, data) {
+                const blot = Quill.find(container);
+                if (blot && blot.updateData) blot.updateData(data);
+            }
+            updateData(data, options = {}) {
+                this.storedData = data;
+                if (!options.skipRender) SmoothTableBlot.renderTable(this.domNode, data);
+                this.domNode.setAttribute('data-table-json', JSON.stringify(data));
+            }
+            static value(domNode) {
+                const container = domNode;
                 const table = container.querySelector('.simple-table');
-                if (!table) return { rows, cols, hasHeader, headers, values };
+                if (!table) return { rows: 2, cols: 2, hasHeader: true, headers: ['Header 1','Header 2'], values: [['',''],['','']] };
                 const currentRows = table.querySelectorAll('tbody tr').length;
                 const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
                 const hasHeaderNow = (table.querySelector('thead') !== null);
                 let currentHeaders = [];
-                if (hasHeaderNow) {
-                    table.querySelectorAll('thead th').forEach(th => {
-                        currentHeaders.push(th.innerText);
-                    });
-                }
+                if (hasHeaderNow) table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
                 const currentValues = [];
                 for (let i=0; i<currentRows; i++) {
                     const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
                     const rowVals = [];
-                    for (let j=0; j<currentCols; j++) {
-                        if (rowCells[j]) rowVals.push(rowCells[j].innerText);
-                        else rowVals.push('');
-                    }
+                    for (let j=0; j<currentCols; j++) rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
                     currentValues.push(rowVals);
                 }
                 return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
-            };
-            
-            const syncDataWithoutRender = () => {
-                const newData = getCurrentData();
-                const blot = Quill.find(container);
-                if (blot) {
-                    blot.storedData = newData;
-                    blot.updateData(newData, { skipRender: true });
-                }
-            };
-            
-            const editableCells = container.querySelectorAll('[contenteditable="true"]');
-            editableCells.forEach(cell => {
-                cell.removeEventListener('blur', syncDataWithoutRender);
-                cell.addEventListener('blur', syncDataWithoutRender);
-            });
-            
-            const addRowBtn = container.querySelector('.add-table-row');
-            const addColBtn = container.querySelector('.add-table-col');
-            if (addRowBtn) {
-                addRowBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    let curr = getCurrentData();
-                    curr.rows++;
-                    curr.values.push(new Array(curr.cols).fill(''));
-                    SmoothTableBlot.renderTable(container, curr);
-                    SmoothTableBlot.notifyUpdate(container, curr);
-                };
-            }
-            if (addColBtn) {
-                addColBtn.onclick = (e) => {
-                    e.stopPropagation();
-                    let curr = getCurrentData();
-                    curr.cols++;
-                    if (curr.hasHeader) {
-                        curr.headers.push(`Header ${curr.cols}`);
-                    }
-                    for (let i=0; i<curr.rows; i++) {
-                        curr.values[i].push('');
-                    }
-                    SmoothTableBlot.renderTable(container, curr);
-                    SmoothTableBlot.notifyUpdate(container, curr);
-                };
             }
         }
-        
-        static notifyUpdate(container, data) {
-            const blot = Quill.find(container);
-            if (blot && blot.updateData) blot.updateData(data);
-        }
-        
-        updateData(data, options = {}) {
-            this.storedData = data;
-            if (!options.skipRender) {
-                SmoothTableBlot.renderTable(this.domNode, data);
-            }
-            this.domNode.setAttribute('data-table-json', JSON.stringify(data));
-        }
-        
-        static value(domNode) {
-            const container = domNode;
-            const table = container.querySelector('.simple-table');
-            if (!table) return { rows: 2, cols: 2, hasHeader: true, headers: ['Header 1','Header 2'], values: [['',''],['','']] };
-            const currentRows = table.querySelectorAll('tbody tr').length;
-            const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
-            const hasHeaderNow = (table.querySelector('thead') !== null);
-            let currentHeaders = [];
-            if (hasHeaderNow) {
-                table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
-            }
-            const currentValues = [];
-            for (let i=0; i<currentRows; i++) {
-                const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
-                const rowVals = [];
-                for (let j=0; j<currentCols; j++) {
-                    rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
-                }
-                currentValues.push(rowVals);
-            }
-            return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
-        }
-        
-        static blotName = 'smoothTable';
-        static tagName = 'div';
-        static className = 'smooth-table-blot';
-    }
-    SmoothTableBlot.blotName = 'smoothTable';
-    SmoothTableBlot.tagName = 'div';
-    SmoothTableBlot.className = 'smooth-table-blot';
-    Quill.register(SmoothTableBlot);
-    
-    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;});}
-    
-    // ------------------------------
-    // 2. Quill initialization
-    // ------------------------------
-    const quill = new Quill('#quillEditor', {
-        theme: 'snow',
-        placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is smooth.',
-        modules: {
-            toolbar: [
-                [{ 'header': [1,2,3,false] }],
-                ['bold', 'italic', 'underline', 'strike'],
-                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                ['link', 'image', 'code-block'],
-                ['clean']
-            ]
-        }
-    });
-    // Drag & drop images
-    const editorDiv = document.querySelector('#quillEditor');
-    editorDiv.addEventListener('dragover', (e) => e.preventDefault());
-    editorDiv.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const files = e.dataTransfer.files;
-        if (files && files[0] && files[0].type.startsWith('image/')) {
-            const reader = new FileReader();
-            reader.onload = (ev) => {
+        SmoothTableBlot.blotName = 'smoothTable';
+        SmoothTableBlot.tagName = 'div';
+        SmoothTableBlot.className = 'smooth-table-blot';
+        Quill.register(SmoothTableBlot);
+        function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
+
+        // ---------- 3. Table insertion modal ----------
+        document.getElementById('insertTableBtn').addEventListener('click', () => {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.innerHTML = `
+                <div class="modal-card">
+                    <h3>Insert Table</h3>
+                    <label>Rows (data rows):</label>
+                    <input type="number" id="tableRows" min="1" max="20" value="3">
+                    <label>Columns:</label>
+                    <input type="number" id="tableCols" min="1" max="20" value="3">
+                    <div class="checkbox-row">
+                        <input type="checkbox" id="includeHeader" checked>
+                        <label for="includeHeader" style="margin:0;">Include header row (editable)</label>
+                    </div>
+                    <div class="modal-actions">
+                        <button id="modalCancel">Cancel</button>
+                        <button id="modalInsert" style="background: var(--accent); color:white;">Insert</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const rowsInp = modal.querySelector('#tableRows');
+            const colsInp = modal.querySelector('#tableCols');
+            const headerChk = modal.querySelector('#includeHeader');
+            modal.querySelector('#modalCancel').onclick = () => modal.remove();
+            modal.querySelector('#modalInsert').onclick = () => {
+                let rows = parseInt(rowsInp.value,10) || 2;
+                let cols = parseInt(colsInp.value,10) || 2;
+                rows = Math.min(20, Math.max(1, rows));
+                cols = Math.min(20, Math.max(1, cols));
+                const hasHeader = headerChk.checked;
+                const headers = hasHeader ? Array(cols).fill().map((_,i)=>`Header ${i+1}`) : [];
+                const values = Array(rows).fill().map(()=>Array(cols).fill(''));
                 const range = quill.getSelection(true);
-                quill.insertEmbed(range.index, 'image', ev.target.result);
+                quill.insertEmbed(range.index, 'smoothTable', { rows, cols, hasHeader, headers, values });
+                modal.remove();
             };
-            reader.readAsDataURL(files[0]);
-        }
-    });
-    
-    // ------------------------------
-    // 3. Table insertion modal
-    // ------------------------------
-    function showTableModal() {
-        const modal = document.createElement('div');
-        modal.className = 'modal-overlay';
-        modal.innerHTML = `
-            <div class="modal-card">
-                <h3>Insert Table</h3>
-                <label>Rows (data rows):</label>
-                <input type="number" id="tableRows" min="1" max="20" value="3">
-                <label>Columns:</label>
-                <input type="number" id="tableCols" min="1" max="20" value="3">
-                <div class="checkbox-row">
-                    <input type="checkbox" id="includeHeader" checked>
-                    <label for="includeHeader" style="margin:0;">Include header row (editable)</label>
-                </div>
-                <div class="modal-actions">
-                    <button id="modalCancel">Cancel</button>
-                    <button id="modalInsert" style="background: var(--accent); color:white;">Insert</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        const rowsInput = modal.querySelector('#tableRows');
-        const colsInput = modal.querySelector('#tableCols');
-        const includeHeaderCheck = modal.querySelector('#includeHeader');
-        const cancelBtn = modal.querySelector('#modalCancel');
-        const insertBtn = modal.querySelector('#modalInsert');
-        const closeModal = () => modal.remove();
-        cancelBtn.onclick = closeModal;
-        insertBtn.onclick = () => {
-            let rows = parseInt(rowsInput.value, 10);
-            let cols = parseInt(colsInput.value, 10);
-            if (isNaN(rows)) rows = 2;
-            if (isNaN(cols)) cols = 2;
-            rows = Math.min(20, Math.max(1, rows));
-            cols = Math.min(20, Math.max(1, cols));
-            const hasHeader = includeHeaderCheck.checked;
-            const headers = hasHeader ? Array(cols).fill().map((_, i) => `Header ${i+1}`) : [];
-            const values = Array(rows).fill().map(() => Array(cols).fill(''));
-            const initialData = { rows, cols, hasHeader, headers, values };
-            const range = quill.getSelection(true);
-            quill.insertEmbed(range.index, 'smoothTable', initialData, Quill.sources.USER);
-            closeModal();
-        };
-    }
-    document.getElementById('insertTableBtn').addEventListener('click', showTableModal);
-    
-    // ------------------------------
-    // 4. Collaboration & autosave
-    // ------------------------------
-    const ydoc = new Y.Doc();
-    const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
-    let provider = null;
-    const roomName = 'kuripedu-' + (new URLSearchParams(location.search).get('room') || 'default');
-    function initCollab() {
-        provider = new YWebRTC(roomName, ydoc, { signaling: ['wss://signaling.yjs.dev'] });
-        provider.on('peers', (peers) => {
-            document.getElementById('peerCount').innerText = peers.size;
         });
-        provider.on('status', (status) => {
-            document.getElementById('roomStatus').innerHTML = status.connected ? '🟢 Connected' : '🔴 Offline';
-        });
-    }
-    
-    function saveToLocal() {
-        const content = quill.root.innerHTML;
-        localStorage.setItem('kuripedu_data', content);
-        document.getElementById('saveStatus').innerText = 'saved';
-        setTimeout(() => { if(document.getElementById('saveStatus')) document.getElementById('saveStatus').innerText = 'synced'; }, 1000);
-        updateStats();
-    }
-    quill.on('text-change', () => { saveToLocal(); });
-    function loadFromLocal() {
-        const saved = localStorage.getItem('kuripedu_data');
-        if (saved && saved !== '<p><br></p>') {
-            quill.root.innerHTML = saved;
-        } else {
-            quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out, no flicker.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code for real-time collaboration.\n🧠 Click "Deep Work" to enter fullscreen focus mode.');
-        }
-        updateStats();
-    }
-    function updateStats() {
-        const text = quill.getText();
-        const words = text.trim().split(/\s+/).filter(w=>w.length).length;
-        document.getElementById('wordCount').innerText = words;
-        document.getElementById('charCount').innerText = text.length;
-    }
-    
-    // ------------------------------
-    // 5. Focus Read Mode
-    // ------------------------------
-    const readModeBtn = document.getElementById('readModeBtn');
-    const readingView = document.getElementById('readingView');
-    function updateReadingView() {
-        readingView.innerHTML = quill.root.innerHTML;
-        readingView.style.fontFamily = 'Georgia, serif';
-        readingView.style.lineHeight = document.getElementById('lineHeightSelect').value;
-        readingView.style.fontSize = document.getElementById('fontSelect').value;
-    }
-    readModeBtn.addEventListener('click', () => {
-        document.body.classList.toggle('read-mode');
-        if (document.body.classList.contains('read-mode')) {
-            updateReadingView();
-            readModeBtn.innerHTML = '<i class="fas fa-edit"></i> Exit Read Mode';
-        } else {
-            readModeBtn.innerHTML = '<i class="fas fa-glasses"></i> Focus Read';
-        }
-    });
-    
-    // ------------------------------
-    // 6. Font & line height controls
-    // ------------------------------
-    document.getElementById('fontSelect').addEventListener('change', (e) => {
-        document.documentElement.style.setProperty('--reading-font-size', e.target.value);
-        if(document.body.classList.contains('read-mode')) updateReadingView();
-        // also apply to editor? optional
-    });
-    document.getElementById('lineHeightSelect').addEventListener('change', (e) => {
-        document.documentElement.style.setProperty('--reading-line-height', e.target.value);
-        if(document.body.classList.contains('read-mode')) updateReadingView();
-    });
-    
-    // ------------------------------
-    // 7. Theme switcher
-    // ------------------------------
-    let themeIndex = 0;
-    const themes = ['light', 'dark', 'sepia'];
-    document.getElementById('themeToggleBtn').addEventListener('click', () => {
-        themeIndex = (themeIndex+1)%3;
-        document.body.classList.remove('dark', 'sepia');
-        if(themes[themeIndex] === 'dark') document.body.classList.add('dark');
-        if(themes[themeIndex] === 'sepia') document.body.classList.add('sepia');
-        localStorage.setItem('themePref', themes[themeIndex]);
-    });
-    const savedTheme = localStorage.getItem('themePref');
-    if(savedTheme === 'dark') { document.body.classList.add('dark'); themeIndex=1; }
-    if(savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex=2; }
-    
-    // ------------------------------
-    // 8. QR & share link
-    // ------------------------------
-    const shareRoomBtn = document.getElementById('shareRoomBtn');
-    const showQrBtn = document.getElementById('showQrBtn');
-    const qrArea = document.getElementById('qrSyncArea');
-    function getShareUrl() {
-        let url = new URL(window.location.href);
-        url.searchParams.set('room', roomName);
-        return url.toString();
-    }
-    shareRoomBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(getShareUrl());
-        alert('Collaboration link copied! Share to invite peers.');
-    });
-    showQrBtn.addEventListener('click', () => {
-        qrArea.style.display = qrArea.style.display === 'none' ? 'flex' : 'none';
-        if(qrArea.style.display === 'flex') {
-            document.getElementById('qrcode').innerHTML = '';
-            new QRCode(document.getElementById('qrcode'), {
-                text: getShareUrl(),
-                width: 120,
-                height: 120
+
+        // ---------- 4. Collaboration & storage ----------
+        const ydoc = new Y.Doc();
+        const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
+        let provider = null;
+        const roomName = 'kuripedu-' + (new URLSearchParams(location.search).get('room') || 'main');
+        function initCollab() {
+            provider = new YWebRTC(roomName, ydoc, { signaling: ['wss://signaling.yjs.dev'] });
+            provider.on('peers', (peers) => document.getElementById('peerCount').innerText = peers.size);
+            provider.on('status', (status) => {
+                document.getElementById('roomStatus').innerHTML = status.connected ? '🟢 Connected' : '🔴 Offline';
             });
         }
-    });
-    
-    // ------------------------------
-    // 9. Export HTML
-    // ------------------------------
-    document.getElementById('exportHtmlBtn').addEventListener('click', () => {
-        const fullDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table, th, td {border:1px solid #ccc; border-collapse:collapse; padding:6px;} [contenteditable="true"]:focus{ outline: none;}</style></head><body><h1>📝 Kuripedu · Exported Note</h1>${quill.root.innerHTML}</body></html>`;
-        const blob = new Blob([fullDoc], {type: 'text/html'});
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `kuripedu_export_${Date.now()}.html`;
-        link.click();
-        URL.revokeObjectURL(link.href);
-    });
-    
-    // ------------------------------
-    // 10. Deep Work Mode (Fullscreen + hide UI)
-    // ------------------------------
-    const deepWorkBtn = document.getElementById('deepWorkBtn');
-    let isDeepWork = false;
-    
-    function toggleDeepWork() {
-        if (!isDeepWork) {
-            // Enter deep work mode
-            document.body.classList.add('deep-work');
-            // Request fullscreen
-            const elem = document.documentElement;
-            if (elem.requestFullscreen) {
-                elem.requestFullscreen().catch(err => {
-                    console.warn(`Fullscreen error: ${err.message}`);
-                });
-            }
-            deepWorkBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
-            isDeepWork = true;
-        } else {
-            // Exit deep work mode
-            document.body.classList.remove('deep-work');
-            if (document.exitFullscreen) {
-                document.exitFullscreen().catch(err => {
-                    console.warn(`Exit fullscreen error: ${err.message}`);
-                });
-            }
-            deepWorkBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
-            isDeepWork = false;
+        function saveLocal() {
+            localStorage.setItem('kuripedu_data', quill.root.innerHTML);
+            document.getElementById('saveStatus').innerText = 'saved';
+            setTimeout(() => { if(document.getElementById('saveStatus')) document.getElementById('saveStatus').innerText = 'synced'; }, 1000);
+            updateStats();
         }
-    }
-    
-    deepWorkBtn.addEventListener('click', toggleDeepWork);
-    // Listen for fullscreen change event to sync button state if user presses ESC
-    document.addEventListener('fullscreenchange', () => {
-        if (!document.fullscreenElement && isDeepWork) {
-            // User exited fullscreen via ESC, so turn off deep work mode
-            document.body.classList.remove('deep-work');
-            deepWorkBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
-            isDeepWork = false;
-        } else if (document.fullscreenElement && !isDeepWork && document.body.classList.contains('deep-work')) {
-            // sync edge case
-            isDeepWork = true;
+        function updateStats() {
+            const text = quill.getText();
+            const words = text.trim().split(/\s+/).filter(w=>w.length).length;
+            document.getElementById('wordCount').innerText = words;
+            document.getElementById('charCount').innerText = text.length;
         }
-    });
-    
-    // ------------------------------
-    // 11. PWA service worker
-    // ------------------------------
-    if ('serviceWorker' in navigator) {
-        const fakeSW = "self.addEventListener('fetch', event => {});";
-        const blobSw = new Blob([fakeSW], {type: 'application/javascript'});
-        const swUrl = URL.createObjectURL(blobSw);
-        navigator.serviceWorker.register(swUrl).catch(e=>console.log("PWA optional"));
-    }
-    
-    // Initialize
-    window.addEventListener('load', () => {
-        loadFromLocal();
-        initCollab();
-        setInterval(() => saveToLocal(), 3000);
-        updateStats();
-    });
+        quill.on('text-change', saveLocal);
+        function loadFromLocal() {
+            const saved = localStorage.getItem('kuripedu_data');
+            if (saved && saved !== '<p><br></p>') quill.root.innerHTML = saved;
+            else quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code.\n🧠 Click "Deep Work" for fullscreen focus.');
+            updateStats();
+        }
+
+        // ---------- 5. UI Controls (all debugged) ----------
+        // Theme
+        let themeIdx = 0;
+        const themes = ['light', 'dark', 'sepia'];
+        const savedTheme = localStorage.getItem('themePref');
+        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx=1; }
+        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx=2; }
+        document.getElementById('themeToggleBtn').addEventListener('click', () => {
+            themeIdx = (themeIdx+1)%3;
+            document.body.classList.remove('dark', 'sepia');
+            if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
+            if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
+            localStorage.setItem('themePref', themes[themeIdx]);
+        });
+
+        // Font size & line height (apply to quill editor)
+        const fontSelect = document.getElementById('fontSelect');
+        const lineSelect = document.getElementById('lineHeightSelect');
+        function applyEditorStyle() {
+            const editorRoot = document.querySelector('.ql-editor');
+            if (editorRoot) {
+                editorRoot.style.fontSize = fontSelect.value;
+                editorRoot.style.lineHeight = lineSelect.value;
+            }
+        }
+        fontSelect.addEventListener('change', applyEditorStyle);
+        lineSelect.addEventListener('change', applyEditorStyle);
+        applyEditorStyle();
+
+        // Focus Read mode
+        const readBtn = document.getElementById('readModeBtn');
+        const readingView = document.getElementById('readingView');
+        function updateReadingView() {
+            readingView.innerHTML = quill.root.innerHTML;
+            readingView.style.fontFamily = 'Georgia, serif';
+            readingView.style.lineHeight = lineSelect.value;
+            readingView.style.fontSize = fontSelect.value;
+        }
+        readBtn.addEventListener('click', () => {
+            document.body.classList.toggle('read-mode');
+            if (document.body.classList.contains('read-mode')) {
+                updateReadingView();
+                readBtn.innerHTML = '<i class="fas fa-edit"></i> Exit Read Mode';
+            } else {
+                readBtn.innerHTML = '<i class="fas fa-glasses"></i> Focus Read';
+            }
+        });
+
+        // Export
+        document.getElementById('exportHtmlBtn').addEventListener('click', () => {
+            const content = quill.root.innerHTML;
+            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table,th,td{border:1px solid #ccc;border-collapse:collapse;padding:6px;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], {type: 'text/html'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `kuripedu_${Date.now()}.html`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
+
+        // Share link & QR
+        const shareBtn = document.getElementById('shareRoomBtn');
+        const qrBtn = document.getElementById('showQrBtn');
+        const qrArea = document.getElementById('qrSyncArea');
+        function getRoomUrl() {
+            let url = new URL(window.location.href);
+            url.searchParams.set('room', roomName);
+            return url.toString();
+        }
+        shareBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Collaboration link copied!')).catch(() => alert('Could not copy'));
+        });
+        qrBtn.addEventListener('click', () => {
+            qrArea.style.display = qrArea.style.display === 'none' ? 'flex' : 'none';
+            if (qrArea.style.display === 'flex') {
+                document.getElementById('qrcode').innerHTML = '';
+                new QRCode(document.getElementById('qrcode'), { text: getRoomUrl(), width: 120, height: 120 });
+            }
+        });
+
+        // Deep Work mode + fullscreen
+        const deepBtn = document.getElementById('deepWorkBtn');
+        let isDeep = false;
+        function toggleDeep() {
+            if (!isDeep) {
+                document.body.classList.add('deep-work');
+                document.documentElement.requestFullscreen?.().catch(e=>console.warn(e));
+                deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
+                isDeep = true;
+            } else {
+                document.body.classList.remove('deep-work');
+                document.exitFullscreen?.().catch(e=>console.warn(e));
+                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                isDeep = false;
+            }
+        }
+        deepBtn.addEventListener('click', toggleDeep);
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && isDeep) {
+                document.body.classList.remove('deep-work');
+                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                isDeep = false;
+            }
+        });
+
+        // ---------- 6. PWA service worker (optional) ----------
+        if ('serviceWorker' in navigator) {
+            const fakeSW = "self.addEventListener('fetch', event => {});";
+            const blobSw = new Blob([fakeSW], {type: 'application/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(blobSw)).catch(e=>console.log("SW optional"));
+        }
+
+        // ---------- 7. Start everything ----------
+        window.addEventListener('load', () => {
+            loadFromLocal();
+            initCollab();
+            setInterval(saveLocal, 3000);
+        });
+    })();
 </script>
 </body>
 </html>
