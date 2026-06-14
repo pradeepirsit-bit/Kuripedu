@@ -2,81 +2,38 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Kuripedu · Simple Notepad</title>
-    <!-- Quill rich text editor (lightweight, reliable) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kuripedu · Collaborative Notepad (Working)</title>
+    <!-- Quill Editor -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    <!-- Font Awesome icons -->
+    <!-- Yjs + Collaboration Providers -->
+    <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
+    <!-- QR Code (for sharing) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
             --bg-body: #f8fafc;
             --bg-panel: #ffffff;
             --text-main: #0f172a;
-            --text-muted: #475569;
             --border: #e2e8f0;
             --accent: #3b82f6;
-            --accent-hover: #2563eb;
-            --toolbar-bg: #ffffffcc;
         }
-        body.dark {
-            --bg-body: #0f172a;
-            --bg-panel: #1e293b;
-            --text-main: #f1f5f9;
-            --text-muted: #94a3b8;
-            --border: #334155;
-            --toolbar-bg: #1e293bcc;
-        }
-        body.sepia {
-            --bg-body: #fbf7e9;
-            --bg-panel: #fef9e6;
-            --text-main: #4a3b2c;
-            --text-muted: #6b5a48;
-            --border: #e2d5b6;
-            --toolbar-bg: #fef9e6cc;
-        }
+        body.dark { --bg-body: #0f172a; --bg-panel: #1e293b; --text-main: #f1f5f9; --border: #334155; }
+        body.sepia { --bg-body: #fbf7e9; --bg-panel: #fef9e6; --text-main: #4a3b2c; --border: #e2d5b6; }
         body {
             background: var(--bg-body);
             color: var(--text-main);
-            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-            transition: background 0.2s, color 0.2s;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            transition: background 0.2s;
             padding: 1rem;
         }
-        /* Deep Work Mode: hide everything except the editor */
-        body.deep-work .notepad-header,
-        body.deep-work .status-bar,
-        body.deep-work .ql-toolbar {
-            display: none !important;
-        }
-        body.deep-work .editor-wrapper {
-            padding: 0 !important;
-        }
-        body.deep-work #quillEditor {
-            min-height: 100vh !important;
-        }
-        body.deep-work .ql-container {
-            border: none !important;
-            font-size: 1.2rem;
-        }
-        body.deep-work .app-container {
-            max-width: 100% !important;
-            margin: 0 !important;
-        }
-        body.deep-work .notepad-card {
-            border-radius: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-        }
-        .app-container {
-            max-width: 1200px;
-            margin: 0 auto;
-        }
+        .app-container { max-width: 1200px; margin: 0 auto; }
         .notepad-card {
             background: var(--bg-panel);
             border-radius: 1.5rem;
@@ -95,7 +52,6 @@
         }
         h1 {
             font-size: 1.5rem;
-            font-weight: 600;
             background: linear-gradient(135deg, var(--accent), #8b5cf6);
             background-clip: text;
             -webkit-background-clip: text;
@@ -108,47 +64,61 @@
             align-items: center;
         }
         button, select {
-            background: var(--toolbar-bg);
+            background: var(--bg-panel);
             border: 1px solid var(--border);
             padding: 0.4rem 0.9rem;
             border-radius: 2rem;
             cursor: pointer;
             font-size: 0.85rem;
-            font-weight: 500;
-            color: var(--text-main);
-            transition: 0.1s;
             display: inline-flex;
             gap: 0.4rem;
             align-items: center;
             font-family: inherit;
+            color: var(--text-main);
         }
         button:hover {
             background: var(--accent);
             color: white;
             border-color: var(--accent);
         }
-        .editor-wrapper {
-            padding: 1rem 1.5rem 1.5rem;
+        .editor-wrapper { padding: 1rem 1.5rem 1.5rem; }
+        #quillEditor { min-height: 450px; }
+        .ql-container { font-size: 0.95rem; }
+        .sync-panel {
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+            padding: 0.6rem 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 0.8rem;
+            font-size: 0.8rem;
         }
-        #quillEditor {
-            min-height: 450px;
+        .status-badge {
+            background: var(--accent);
+            color: white;
+            border-radius: 1rem;
+            padding: 0.2rem 0.7rem;
+            font-size: 0.7rem;
         }
-        .ql-container {
-            font-size: 0.95rem;
+        .qr-area {
+            display: none;
+            margin-top: 0.5rem;
+            padding: 0.5rem;
+            background: white;
+            border-radius: 0.8rem;
+            width: fit-content;
         }
         .status-bar {
             padding: 0.6rem 1.5rem;
-            font-size: 0.75rem;
-            background: var(--bg-panel);
             border-top: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 0.5rem;
+            font-size: 0.75rem;
         }
         @media (max-width: 700px) {
             .notepad-header { flex-direction: column; align-items: stretch; }
-            body { padding: 0.5rem; }
         }
     </style>
 </head>
@@ -156,41 +126,64 @@
 <div class="app-container">
     <div class="notepad-card">
         <div class="notepad-header">
-            <h1><i class="fas fa-pen-fancy"></i> Kuripedu · குறிப்பேடு</h1>
+            <h1><i class="fas fa-users"></i> Kuripedu · Live Collab</h1>
             <div class="toolbar-group">
                 <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
-                <button id="themeToggleBtn"><i class="fas fa-palette"></i> Theme</button>
+                <button id="themeBtn"><i class="fas fa-palette"></i> Theme</button>
                 <select id="fontSelect">
                     <option value="0.9rem">Font: Small</option>
                     <option value="1rem" selected>Font: Normal</option>
                     <option value="1.2rem">Font: Large</option>
-                    <option value="1.4rem">Font: X-Large</option>
                 </select>
                 <select id="lineHeightSelect">
                     <option value="1.4">Line H: 1.4</option>
                     <option value="1.6" selected>Line H: 1.6</option>
                     <option value="1.8">Line H: 1.8</option>
-                    <option value="2.0">Line H: 2.0</option>
                 </select>
                 <button id="exportBtn"><i class="fas fa-download"></i> Export</button>
             </div>
         </div>
-        <div class="editor-wrapper">
-            <div id="quillEditor"></div>
+        <div id="quillEditor"></div>
+        <div class="sync-panel">
+            <div>
+                <span><i class="fas fa-globe"></i> Collaboration: </span>
+                <span id="roomStatus" class="status-badge">🟡 Connecting...</span>
+                <span style="margin-left: 1rem;"><i class="fas fa-user-friends"></i> <span id="peerCount">0</span> online</span>
+            </div>
+            <div>
+                <button id="shareLinkBtn"><i class="fas fa-link"></i> Copy Room Link</button>
+                <button id="showQrBtn"><i class="fas fa-qrcode"></i> Show QR</button>
+            </div>
+            <div id="qrContainer" class="qr-area"><div id="qrcode"></div><small>Scan to join this room</small></div>
         </div>
         <div class="status-bar">
             <span><i class="fas fa-save"></i> Auto-saved</span>
-            <span><i class="fas fa-chart-line"></i> Words: <span id="wordCount">0</span> | Characters: <span id="charCount">0</span></span>
+            <span>Words: <span id="wordCount">0</span> | Characters: <span id="charCount">0</span></span>
         </div>
     </div>
 </div>
 
 <script>
     (function() {
-        // ---------- 1. Initialize Quill (simple, reliable) ----------
+        // ------------------------------
+        // 1. Get or create a room ID from URL (shareable)
+        // ------------------------------
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomName = urlParams.get('room');
+        if (!roomName) {
+            roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('room', roomName);
+            window.history.replaceState({}, '', newUrl);
+        }
+
+        // ------------------------------
+        // 2. Initialize Quill and Yjs
+        // ------------------------------
+        const ydoc = new Y.Doc();
         const quill = new Quill('#quillEditor', {
             theme: 'snow',
-            placeholder: 'Start writing... Your notes are automatically saved.',
+            placeholder: 'Start writing – changes appear in real time!\nOpen this page in another browser window to test collaboration.',
             modules: {
                 toolbar: [
                     [{ 'header': [1, 2, 3, false] }],
@@ -200,126 +193,156 @@
                 ]
             }
         });
+        const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
 
-        // ---------- 2. Helper: update word/character count ----------
-        function updateStats() {
-            const text = quill.getText();
-            const chars = text.length;
-            const words = text.trim().split(/\s+/).filter(w => w.length).length;
-            document.getElementById('wordCount').innerText = words;
-            document.getElementById('charCount').innerText = chars;
-        }
+        // ------------------------------
+        // 3. Collaboration: YWebRTC with multiple fallback signaling servers
+        // ------------------------------
+        const signalingServers = [
+            'wss://y-webrtc-signaling-eu.herokuapp.com',
+            'wss://y-webrtc-signaling-us.herokuapp.com',
+            'wss://signaling.yjs.dev'
+        ];
+        let provider = null;
+        let currentServerIndex = 0;
+        let isConnected = false;
 
-        // ---------- 3. Auto-save to localStorage ----------
-        const STORAGE_KEY = 'kuripedu_notepad_data';
-        function saveToLocal() {
-            const content = quill.root.innerHTML;
-            localStorage.setItem(STORAGE_KEY, content);
-            updateStats();
-            // Visual feedback on save status
-            const statusSpan = document.querySelector('.status-bar span:first-child');
-            if (statusSpan) {
-                const originalHtml = statusSpan.innerHTML;
-                statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved!';
-                setTimeout(() => {
-                    if (statusSpan) statusSpan.innerHTML = originalHtml;
-                }, 1200);
+        function tryNextSignalingServer() {
+            if (provider) {
+                try { provider.disconnect(); provider.destroy(); } catch(e) {}
+            }
+            if (currentServerIndex >= signalingServers.length) {
+                document.getElementById('roomStatus').innerHTML = '🔴 No server available';
+                document.getElementById('roomStatus').style.background = '#ef4444';
+                return;
+            }
+            const server = signalingServers[currentServerIndex];
+            console.log(`Trying signaling server: ${server}`);
+            document.getElementById('roomStatus').innerHTML = `🟡 Trying ${server.split('/')[2]}...`;
+            document.getElementById('roomStatus').style.background = '#eab308';
+            try {
+                provider = new YWebRTC(roomName, ydoc, { signaling: [server] });
+                provider.on('status', (status) => {
+                    if (status.connected) {
+                        isConnected = true;
+                        document.getElementById('roomStatus').innerHTML = '🟢 Connected';
+                        document.getElementById('roomStatus').style.background = '#10b981';
+                    }
+                });
+                provider.on('peers', (peers) => {
+                    document.getElementById('peerCount').innerText = peers.size;
+                });
+                provider.on('connection-error', (err) => {
+                    console.warn(`Signaling server ${server} failed:`, err);
+                    currentServerIndex++;
+                    tryNextSignalingServer();
+                });
+            } catch(e) {
+                console.warn(e);
+                currentServerIndex++;
+                tryNextSignalingServer();
             }
         }
-        function loadFromLocal() {
+        tryNextSignalingServer();
+
+        // ------------------------------
+        // 4. Local backup & word/char count (auto-save)
+        // ------------------------------
+        const STORAGE_KEY = 'kuripedu_backup';
+        function updateStats() {
+            const text = quill.getText();
+            const words = text.trim().split(/\s+/).filter(w => w.length).length;
+            document.getElementById('wordCount').innerText = words;
+            document.getElementById('charCount').innerText = text.length;
+        }
+        function saveBackup() {
+            localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
+            updateStats();
+            const statusSpan = document.querySelector('.status-bar span:first-child');
+            if (statusSpan) {
+                const original = statusSpan.innerHTML;
+                statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
+                setTimeout(() => { if(statusSpan) statusSpan.innerHTML = original; }, 1000);
+            }
+        }
+        quill.on('text-change', saveBackup);
+        function loadBackup() {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved && saved !== '<p><br></p>') {
                 quill.root.innerHTML = saved;
             } else {
-                quill.setText('✨ Welcome to Kuripedu ✨\n\n• Write anything – notes, lists, ideas.\n• Click "Deep Work" for fullscreen focus (hides all UI).\n• Change theme, font size, and line height.\n• Export your note as HTML.\n• Everything auto-saves in your browser.\n\nHappy writing!');
+                quill.setText('✨ Real-time Collaboration Active ✨\n\n• Open this page in another browser window (or incognito mode).\n• Both windows will sync instantly.\n• Share the link or QR code below to invite others.\n• If no one joins, you’re still writing offline.\n\nHappy co-writing!');
             }
             updateStats();
         }
-        quill.on('text-change', () => {
-            saveToLocal();
-        });
+        loadBackup();
+        setInterval(saveBackup, 10000);
 
-        // ---------- 4. Theme Toggle (light / dark / sepia) ----------
-        let themeIndex = 0;
+        // ------------------------------
+        // 5. Theme switcher (light / dark / sepia)
+        // ------------------------------
+        let themeIdx = 0;
         const themes = ['light', 'dark', 'sepia'];
         const savedTheme = localStorage.getItem('kuripedu_theme');
-        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIndex = 1; }
-        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex = 2; }
-        document.getElementById('themeToggleBtn').addEventListener('click', () => {
-            themeIndex = (themeIndex + 1) % 3;
+        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx = 1; }
+        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx = 2; }
+        document.getElementById('themeBtn').addEventListener('click', () => {
+            themeIdx = (themeIdx + 1) % 3;
             document.body.classList.remove('dark', 'sepia');
-            if (themes[themeIndex] === 'dark') document.body.classList.add('dark');
-            if (themes[themeIndex] === 'sepia') document.body.classList.add('sepia');
-            localStorage.setItem('kuripedu_theme', themes[themeIndex]);
+            if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
+            if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
+            localStorage.setItem('kuripedu_theme', themes[themeIdx]);
         });
 
-        // ---------- 5. Font size & Line height controls (apply to editor) ----------
+        // ------------------------------
+        // 6. Font size & line height
+        // ------------------------------
         const fontSelect = document.getElementById('fontSelect');
         const lineSelect = document.getElementById('lineHeightSelect');
         function applyEditorStyle() {
-            const editorContent = document.querySelector('.ql-editor');
-            if (editorContent) {
-                editorContent.style.fontSize = fontSelect.value;
-                editorContent.style.lineHeight = lineSelect.value;
+            const editor = document.querySelector('.ql-editor');
+            if (editor) {
+                editor.style.fontSize = fontSelect.value;
+                editor.style.lineHeight = lineSelect.value;
             }
         }
         fontSelect.addEventListener('change', applyEditorStyle);
         lineSelect.addEventListener('change', applyEditorStyle);
-        // initial style after DOM ready
         setTimeout(applyEditorStyle, 100);
 
-        // ---------- 6. Export as HTML file ----------
+        // ------------------------------
+        // 7. Export as HTML
+        // ------------------------------
         document.getElementById('exportBtn').addEventListener('click', () => {
             const content = quill.root.innerHTML;
-            const fullHtml = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>Kuripedu_Export</title>
-    <style>
-        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 2rem; max-width: 900px; margin: 0 auto; line-height: 1.6; }
-        h1 { color: #3b82f6; }
-        .ql-editor { font-size: 1rem; }
-    </style>
-</head>
-<body>
-<h1>📝 Kuripedu Export</h1>
-${content}
-</body>
-</html>`;
-            const blob = new Blob([fullHtml], { type: 'text/html' });
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = `kuripedu_${Date.now()}.html`;
-            link.click();
-            URL.revokeObjectURL(link.href);
+            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title><style>body{font-family:sans-serif;padding:2rem;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], { type: 'text/html' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `kuripedu_${Date.now()}.html`;
+            a.click();
+            URL.revokeObjectURL(a.href);
         });
 
-        // ---------- 7. Deep Work Mode (fullscreen + hide UI) ----------
-        const deepBtn = document.getElementById('deepWorkBtn');
+        // ------------------------------
+        // 8. Deep Work Mode (fullscreen + hide UI)
+        // ------------------------------
         let isDeep = false;
+        const deepBtn = document.getElementById('deepWorkBtn');
         function toggleDeepWork() {
             if (!isDeep) {
-                // Enter deep work mode
                 document.body.classList.add('deep-work');
                 const elem = document.documentElement;
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(err => console.warn('Fullscreen error:', err));
-                }
+                if (elem.requestFullscreen) elem.requestFullscreen().catch(e => console.warn(e));
                 deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
                 isDeep = true;
             } else {
-                // Exit deep work mode
                 document.body.classList.remove('deep-work');
-                if (document.exitFullscreen) {
-                    document.exitFullscreen().catch(err => console.warn('Exit fullscreen error:', err));
-                }
+                if (document.exitFullscreen) document.exitFullscreen().catch(e => console.warn(e));
                 deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
             }
         }
         deepBtn.addEventListener('click', toggleDeepWork);
-        // Listen for fullscreen change (if user presses ESC)
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isDeep) {
                 document.body.classList.remove('deep-work');
@@ -328,11 +351,54 @@ ${content}
             }
         });
 
-        // ---------- 8. Load saved data on start ----------
-        loadFromLocal();
+        // Additional CSS for deep work (hide UI)
+        const style = document.createElement('style');
+        style.textContent = `
+            body.deep-work .notepad-header,
+            body.deep-work .sync-panel,
+            body.deep-work .status-bar,
+            body.deep-work .ql-toolbar {
+                display: none !important;
+            }
+            body.deep-work .editor-wrapper { padding: 0 !important; }
+            body.deep-work #quillEditor { min-height: 100vh !important; }
+            body.deep-work .ql-container { border: none !important; font-size: 1.2rem; }
+            body.deep-work .app-container { max-width: 100% !important; margin: 0 !important; }
+            body.deep-work .notepad-card { border-radius: 0 !important; border: none !important; box-shadow: none !important; }
+        `;
+        document.head.appendChild(style);
 
-        // Optional periodic backup (every 30 seconds)
-        setInterval(saveToLocal, 30000);
+        // ------------------------------
+        // 9. Share Link & QR Code
+        // ------------------------------
+        const shareBtn = document.getElementById('shareLinkBtn');
+        const qrBtn = document.getElementById('showQrBtn');
+        const qrContainer = document.getElementById('qrContainer');
+        const qrDiv = document.getElementById('qrcode');
+        function getRoomUrl() {
+            let url = new URL(window.location.href);
+            url.searchParams.set('room', roomName);
+            return url.toString();
+        }
+        shareBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied! Share it with others.')).catch(() => alert('Copy manually: ' + getRoomUrl()));
+        });
+        let qrGenerated = false;
+        qrBtn.addEventListener('click', () => {
+            if (qrContainer.style.display === 'none' || !qrContainer.style.display) {
+                qrContainer.style.display = 'block';
+                if (!qrGenerated) {
+                    qrDiv.innerHTML = '';
+                    new QRCode(qrDiv, { text: getRoomUrl(), width: 120, height: 120 });
+                    qrGenerated = true;
+                }
+                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
+            } else {
+                qrContainer.style.display = 'none';
+                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
+            }
+        });
+        qrContainer.style.display = 'none';
     })();
 </script>
 </body>
