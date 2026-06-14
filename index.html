@@ -1,21 +1,20 @@
 <!DOCTYPE html>
-<html lang="ta">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Kuripedu · Deep Work Notepad</title>
-    <!-- PWA manifest (correct JSON syntax as data URL) -->
-    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Kuripedu%22,%22short_name%22:%22Kuripedu%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230f172a%22,%22theme_color%22:%22%233b82f6%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233b82f6'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='white'%3EK%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
-    <!-- Load external libraries with fallback -->
-    <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
+    <title>Kuripedu · Minimal Notepad</title>
+    <!-- Quill rich text editor (lightweight) -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <!-- Font Awesome icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         :root {
             --bg-body: #f8fafc;
             --bg-panel: #ffffff;
@@ -25,7 +24,6 @@
             --accent: #3b82f6;
             --accent-hover: #2563eb;
             --toolbar-bg: #ffffffcc;
-            --table-header: #f1f5f9;
         }
         body.dark {
             --bg-body: #0f172a;
@@ -34,7 +32,6 @@
             --text-muted: #94a3b8;
             --border: #334155;
             --toolbar-bg: #1e293bcc;
-            --table-header: #334155;
         }
         body.sepia {
             --bg-body: #fbf7e9;
@@ -43,7 +40,6 @@
             --text-muted: #6b5a48;
             --border: #e2d5b6;
             --toolbar-bg: #fef9e6cc;
-            --table-header: #f0e5cf;
         }
         body {
             background: var(--bg-body);
@@ -52,33 +48,44 @@
             transition: background 0.2s, color 0.2s;
             padding: 1rem;
         }
-        /* Deep Work Mode: hide everything except editor */
+        /* Deep Work Mode: hide everything except the editor */
         body.deep-work .notepad-header,
-        body.deep-work .sync-panel,
         body.deep-work .status-bar,
-        body.deep-work .collab-bar,
-        body.deep-work .editor-wrapper > div:last-child,
-        body.deep-work .table-inline-toolbar,
         body.deep-work .ql-toolbar {
             display: none !important;
         }
-        body.deep-work .editor-wrapper { padding: 0 !important; }
-        body.deep-work #quillEditor { min-height: 100vh !important; }
-        body.deep-work .ql-container { border: none !important; font-size: 1.2rem; }
-        body.deep-work .app-container { max-width: 100% !important; margin: 0 !important; }
-        body.deep-work .notepad-card { border-radius: 0 !important; border: none !important; box-shadow: none !important; }
-        body.deep-work .simple-table-wrapper .table-inline-toolbar { display: none !important; }
-        /* normal styles */
-        .app-container { max-width: 1400px; margin: 0 auto; }
+        body.deep-work .editor-wrapper {
+            padding: 0 !important;
+        }
+        body.deep-work #quillEditor {
+            min-height: 100vh !important;
+        }
+        body.deep-work .ql-container {
+            border: none !important;
+            font-size: 1.2rem;
+        }
+        body.deep-work .app-container {
+            max-width: 100% !important;
+            margin: 0 !important;
+        }
+        body.deep-work .notepad-card {
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
         .notepad-card {
             background: var(--bg-panel);
-            border-radius: 2rem;
+            border-radius: 1.5rem;
             border: 1px solid var(--border);
             overflow: hidden;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.02);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.05);
         }
         .notepad-header {
-            padding: 1rem 1.8rem;
+            padding: 1rem 1.5rem;
             border-bottom: 1px solid var(--border);
             display: flex;
             flex-wrap: wrap;
@@ -87,15 +94,12 @@
             gap: 1rem;
         }
         h1 {
-            font-size: 1.6rem;
+            font-size: 1.5rem;
             font-weight: 600;
             background: linear-gradient(135deg, var(--accent), #8b5cf6);
             background-clip: text;
             -webkit-background-clip: text;
             color: transparent;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
         }
         .toolbar-group {
             display: flex;
@@ -103,7 +107,7 @@
             gap: 0.5rem;
             align-items: center;
         }
-        button, .btn-like {
+        button, select {
             background: var(--toolbar-bg);
             border: 1px solid var(--border);
             padding: 0.4rem 0.9rem;
@@ -116,441 +120,175 @@
             display: inline-flex;
             gap: 0.4rem;
             align-items: center;
+            font-family: inherit;
         }
         button:hover {
             background: var(--accent);
             color: white;
             border-color: var(--accent);
         }
-        .ql-container { font-size: 0.95rem; }
-        .editor-wrapper { padding: 1rem 1.8rem 1.5rem; }
-        .simple-table-wrapper { margin: 0.8rem 0; overflow-x: auto; }
-        .simple-table {
-            width: 100%;
-            border-collapse: collapse;
-            background: var(--bg-panel);
+        .editor-wrapper {
+            padding: 1rem 1.5rem 1.5rem;
         }
-        .simple-table th, .simple-table td {
-            border: 1px solid var(--border);
-            padding: 0.5rem;
-            text-align: left;
-            vertical-align: top;
-            min-width: 80px;
+        #quillEditor {
+            min-height: 450px;
         }
-        .simple-table th { background: var(--table-header); font-weight: 600; }
-        .simple-table [contenteditable="true"] { outline: none; cursor: text; }
-        .table-inline-toolbar {
-            display: flex;
-            gap: 0.4rem;
-            margin-top: 0.5rem;
-            justify-content: flex-end;
+        .ql-container {
+            font-size: 0.95rem;
         }
-        .status-bar, .collab-bar {
-            padding: 0.5rem 1.8rem;
+        .status-bar {
+            padding: 0.6rem 1.5rem;
             font-size: 0.75rem;
             background: var(--bg-panel);
             border-top: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             flex-wrap: wrap;
-        }
-        .sync-panel {
-            background: var(--bg-panel);
-            border-radius: 1rem;
-            padding: 0.75rem;
-            margin: 0.5rem 1.8rem 1rem;
-            border: 1px solid var(--border);
-        }
-        .qr-container { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-        #qrcode { background: white; padding: 0.5rem; border-radius: 0.75rem; }
-        .badge {
-            background: var(--accent);
-            color: white;
-            border-radius: 1rem;
-            padding: 0.2rem 0.6rem;
-            font-size: 0.7rem;
-        }
-        .modal-overlay {
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        .modal-card {
-            background: var(--bg-panel);
-            border-radius: 1.5rem;
-            padding: 1.5rem;
-            width: 320px;
-            border: 1px solid var(--border);
-            box-shadow: 0 20px 30px -10px rgba(0,0,0,0.2);
-        }
-        .modal-card input, .modal-card label { margin: 0.5rem 0; display: block; }
-        .modal-card input[type="number"] {
-            width: 100%;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            border: 1px solid var(--border);
-            background: var(--bg-panel);
-            color: var(--text-main);
-        }
-        .modal-card .checkbox-row {
-            display: flex;
-            align-items: center;
             gap: 0.5rem;
-            margin: 0.8rem 0;
         }
-        .checkbox-row input { width: auto; margin: 0; }
-        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
-        @media (max-width: 700px) { .notepad-header { flex-direction: column; align-items: stretch; } }
+        @media (max-width: 700px) {
+            .notepad-header { flex-direction: column; align-items: stretch; }
+            body { padding: 0.5rem; }
+        }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="notepad-card">
         <div class="notepad-header">
-            <h1><i class="fas fa-pen-fancy"></i> Kuripedu <span style="font-size:0.9rem;">(குறிப்பேடு)</span></h1>
+            <h1><i class="fas fa-pen-fancy"></i> Kuripedu · குறிப்பேடு</h1>
             <div class="toolbar-group">
                 <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
                 <button id="themeToggleBtn"><i class="fas fa-palette"></i> Theme</button>
                 <select id="fontSelect">
-                    <option value="1rem">Font Size: Normal</option>
-                    <option value="1.2rem">Large</option>
-                    <option value="1.4rem">X-Large</option>
+                    <option value="0.9rem">Font: Small</option>
+                    <option value="1rem" selected>Font: Normal</option>
+                    <option value="1.2rem">Font: Large</option>
+                    <option value="1.4rem">Font: X-Large</option>
                 </select>
                 <select id="lineHeightSelect">
-                    <option value="1.5">Line H: 1.5</option>
-                    <option value="1.7" selected>1.7</option>
-                    <option value="2">2.0</option>
+                    <option value="1.4">Line H: 1.4</option>
+                    <option value="1.6" selected>Line H: 1.6</option>
+                    <option value="1.8">Line H: 1.8</option>
+                    <option value="2.0">Line H: 2.0</option>
                 </select>
-                <button id="exportHtmlBtn"><i class="fas fa-download"></i> Export</button>
+                <button id="exportBtn"><i class="fas fa-download"></i> Export</button>
             </div>
         </div>
         <div class="editor-wrapper">
-            <div id="quillEditor" style="min-height: 400px;"></div>
-            <div style="margin-top: 0.8rem;">
-                <button id="insertTableBtn" class="btn-like"><i class="fas fa-border-all"></i> Insert Table (rows/cols + header toggle)</button>
-            </div>
-        </div>
-        <div class="sync-panel">
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap;">
-                <span><i class="fas fa-users"></i> CRDT Collaboration (WebRTC) </span>
-                <span id="roomStatus" class="badge">🟢 Room: kuripedu</span>
-                <button id="shareRoomBtn"><i class="fas fa-link"></i> Copy share link</button>
-                <button id="showQrBtn"><i class="fas fa-qrcode"></i> Show sync QR</button>
-            </div>
-            <div id="qrSyncArea" style="display: none; margin-top: 1rem;" class="qr-container">
-                <div id="qrcode"></div>
-                <div><small>Scan QR to join this room (E2EE via WebRTC).<br>Tables sync live – editing is smooth.</small></div>
-            </div>
+            <div id="quillEditor"></div>
         </div>
         <div class="status-bar">
-            <span><i class="fas fa-sync-alt"></i> Auto-save: <span id="saveStatus">synced</span></span>
-            <span><i class="fas fa-chart-line"></i> Words: <span id="wordCount">0</span> | Chars: <span id="charCount">0</span></span>
-        </div>
-        <div class="collab-bar">
-            <span><i class="fas fa-user-friends"></i> <span id="peerCount">0</span> peer(s) editing</span>
-            <span><i class="fas fa-shield-alt"></i> End‑to‑end encrypted</span>
+            <span><i class="fas fa-save"></i> Auto-saved</span>
+            <span><i class="fas fa-chart-line"></i> Words: <span id="wordCount">0</span> | Characters: <span id="charCount">0</span></span>
         </div>
     </div>
 </div>
 
 <script>
     (function() {
-        // Ensure all required globals exist
-        function checkDependencies() {
-            if (typeof Y === 'undefined') return false;
-            if (typeof YWebRTC === 'undefined') return false;
-            if (typeof Quill === 'undefined') return false;
-            if (typeof QuillBinding === 'undefined') return false;
-            if (typeof QRCode === 'undefined') return false;
-            return true;
-        }
-
-        if (!checkDependencies()) {
-            console.warn("Waiting for dependencies...");
-            setTimeout(() => { location.reload(); }, 500);
-            return;
-        }
-
-        // ---------- 1. Initialize Quill ----------
+        // ---------- 1. Initialize Quill (simple toolbar) ----------
         const quill = new Quill('#quillEditor', {
             theme: 'snow',
-            placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is smooth.',
+            placeholder: 'Start writing... Your notes are automatically saved.',
             modules: {
                 toolbar: [
                     [{ 'header': [1,2,3,false] }],
                     ['bold', 'italic', 'underline', 'strike'],
                     [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                    ['link', 'image', 'code-block'],
-                    ['clean']
+                    ['link', 'clean']
                 ]
             }
         });
 
-        // Drag & drop images
-        const editorDiv = document.querySelector('#quillEditor');
-        editorDiv.addEventListener('dragover', e => e.preventDefault());
-        editorDiv.addEventListener('drop', e => {
-            e.preventDefault();
-            const files = e.dataTransfer.files;
-            if (files && files[0] && files[0].type.startsWith('image/')) {
-                const reader = new FileReader();
-                reader.onload = ev => {
-                    const range = quill.getSelection(true);
-                    quill.insertEmbed(range.index, 'image', ev.target.result);
-                };
-                reader.readAsDataURL(files[0]);
-            }
-        });
-
-        // ---------- 2. Custom Table Blot (smooth editing, blur sync) ----------
-        const BlockEmbed = Quill.import('blots/block/embed');
-        class SmoothTableBlot extends BlockEmbed {
-            static create(data) {
-                const node = super.create();
-                node.classList.add('simple-table-wrapper');
-                node.setAttribute('data-table-id', 'tbl-' + Date.now() + '-' + Math.random());
-                this.renderTable(node, data);
-                return node;
-            }
-            static renderTable(container, data) {
-                const rows = data.rows || 2;
-                const cols = data.cols || 2;
-                const hasHeader = data.hasHeader !== undefined ? data.hasHeader : true;
-                const headers = data.headers || (hasHeader ? Array(cols).fill().map((_, i) => `Header ${i+1}`) : []);
-                const values = data.values || Array(rows).fill().map(() => Array(cols).fill(''));
-                let html = `<table class="simple-table" contenteditable="false">`;
-                if (hasHeader && headers.length === cols) {
-                    html += `<thead><tr>`;
-                    for (let c = 0; c < cols; c++) {
-                        html += `<th contenteditable="true" data-col="${c}">${escapeHtml(String(headers[c]))}</th>`;
-                    }
-                    html += `</thead>`;
-                }
-                html += `<tbody>`;
-                for (let i = 0; i < rows; i++) {
-                    html += `<tr>`;
-                    for (let j = 0; j < cols; j++) {
-                        const cellValue = (values[i] && values[i][j] !== undefined) ? values[i][j] : '';
-                        html += `<td contenteditable="true" data-row="${i}" data-col="${j}">${escapeHtml(String(cellValue))}</td>`;
-                    }
-                    html += `</tr>`;
-                }
-                html += `</tbody></table><div class="table-inline-toolbar">
-                            <button class="add-table-row">➕ Add Row</button>
-                            <button class="add-table-col">➕ Add Column</button>
-                        </div>`;
-                container.innerHTML = html;
-                const getCurrentData = () => {
-                    const table = container.querySelector('.simple-table');
-                    if (!table) return { rows, cols, hasHeader, headers, values };
-                    const currentRows = table.querySelectorAll('tbody tr').length;
-                    const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
-                    const hasHeaderNow = (table.querySelector('thead') !== null);
-                    let currentHeaders = [];
-                    if (hasHeaderNow) {
-                        table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
-                    }
-                    const currentValues = [];
-                    for (let i = 0; i < currentRows; i++) {
-                        const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
-                        const rowVals = [];
-                        for (let j = 0; j < currentCols; j++) {
-                            rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
-                        }
-                        currentValues.push(rowVals);
-                    }
-                    return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
-                };
-                const syncDataWithoutRender = () => {
-                    const newData = getCurrentData();
-                    const blot = Quill.find(container);
-                    if (blot) {
-                        blot.storedData = newData;
-                        blot.updateData(newData, { skipRender: true });
-                    }
-                };
-                const editableCells = container.querySelectorAll('[contenteditable="true"]');
-                editableCells.forEach(cell => {
-                    cell.removeEventListener('blur', syncDataWithoutRender);
-                    cell.addEventListener('blur', syncDataWithoutRender);
-                });
-                const addRowBtn = container.querySelector('.add-table-row');
-                const addColBtn = container.querySelector('.add-table-col');
-                if (addRowBtn) {
-                    addRowBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        let curr = getCurrentData();
-                        curr.rows++;
-                        curr.values.push(new Array(curr.cols).fill(''));
-                        SmoothTableBlot.renderTable(container, curr);
-                        SmoothTableBlot.notifyUpdate(container, curr);
-                    };
-                }
-                if (addColBtn) {
-                    addColBtn.onclick = (e) => {
-                        e.stopPropagation();
-                        let curr = getCurrentData();
-                        curr.cols++;
-                        if (curr.hasHeader) curr.headers.push(`Header ${curr.cols}`);
-                        for (let i = 0; i < curr.rows; i++) curr.values[i].push('');
-                        SmoothTableBlot.renderTable(container, curr);
-                        SmoothTableBlot.notifyUpdate(container, curr);
-                    };
-                }
-            }
-            static notifyUpdate(container, data) {
-                const blot = Quill.find(container);
-                if (blot && blot.updateData) blot.updateData(data);
-            }
-            updateData(data, options = {}) {
-                this.storedData = data;
-                if (!options.skipRender) SmoothTableBlot.renderTable(this.domNode, data);
-                this.domNode.setAttribute('data-table-json', JSON.stringify(data));
-            }
-            static value(domNode) {
-                const container = domNode;
-                const table = container.querySelector('.simple-table');
-                if (!table) return { rows: 2, cols: 2, hasHeader: true, headers: ['Header 1','Header 2'], values: [['',''],['','']] };
-                const currentRows = table.querySelectorAll('tbody tr').length;
-                const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
-                const hasHeaderNow = (table.querySelector('thead') !== null);
-                let currentHeaders = [];
-                if (hasHeaderNow) table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
-                const currentValues = [];
-                for (let i = 0; i < currentRows; i++) {
-                    const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
-                    const rowVals = [];
-                    for (let j = 0; j < currentCols; j++) rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
-                    currentValues.push(rowVals);
-                }
-                return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
-            }
-        }
-        SmoothTableBlot.blotName = 'smoothTable';
-        SmoothTableBlot.tagName = 'div';
-        SmoothTableBlot.className = 'smooth-table-blot';
-        Quill.register(SmoothTableBlot);
-        function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
-
-        // ---------- 3. Insert Table Modal ----------
-        document.getElementById('insertTableBtn').addEventListener('click', () => {
-            const modal = document.createElement('div');
-            modal.className = 'modal-overlay';
-            modal.innerHTML = `
-                <div class="modal-card">
-                    <h3>Insert Table</h3>
-                    <label>Rows (data rows):</label>
-                    <input type="number" id="tableRows" min="1" max="20" value="3">
-                    <label>Columns:</label>
-                    <input type="number" id="tableCols" min="1" max="20" value="3">
-                    <div class="checkbox-row">
-                        <input type="checkbox" id="includeHeader" checked>
-                        <label for="includeHeader" style="margin:0;">Include header row (editable)</label>
-                    </div>
-                    <div class="modal-actions">
-                        <button id="modalCancel">Cancel</button>
-                        <button id="modalInsert" style="background: var(--accent); color:white;">Insert</button>
-                    </div>
-                </div>
-            `;
-            document.body.appendChild(modal);
-            const rowsInp = modal.querySelector('#tableRows');
-            const colsInp = modal.querySelector('#tableCols');
-            const headerChk = modal.querySelector('#includeHeader');
-            modal.querySelector('#modalCancel').onclick = () => modal.remove();
-            modal.querySelector('#modalInsert').onclick = () => {
-                let rows = parseInt(rowsInp.value,10) || 2;
-                let cols = parseInt(colsInp.value,10) || 2;
-                rows = Math.min(20, Math.max(1, rows));
-                cols = Math.min(20, Math.max(1, cols));
-                const hasHeader = headerChk.checked;
-                const headers = hasHeader ? Array(cols).fill().map((_,i)=>`Header ${i+1}`) : [];
-                const values = Array(rows).fill().map(()=>Array(cols).fill(''));
-                const range = quill.getSelection(true);
-                if (range) quill.insertEmbed(range.index, 'smoothTable', { rows, cols, hasHeader, headers, values });
-                else quill.insertEmbed(quill.getLength()-1, 'smoothTable', { rows, cols, hasHeader, headers, values });
-                modal.remove();
-            };
-        });
-
-        // ---------- 4. Collaboration & Local Storage ----------
-        const ydoc = new Y.Doc();
-        const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
-        let provider = null;
-        const roomName = 'kuripedu-' + (new URLSearchParams(location.search).get('room') || 'main');
-        function initCollab() {
-            provider = new YWebRTC(roomName, ydoc, { signaling: ['wss://signaling.yjs.dev'] });
-            provider.on('peers', (peers) => {
-                const pc = document.getElementById('peerCount');
-                if (pc) pc.innerText = peers.size;
-            });
-            provider.on('status', (status) => {
-                const rs = document.getElementById('roomStatus');
-                if (rs) rs.innerHTML = status.connected ? '🟢 Connected' : '🔴 Offline';
-            });
-        }
-        function saveLocal() {
-            localStorage.setItem('kuripedu_data', quill.root.innerHTML);
-            const ss = document.getElementById('saveStatus');
-            if (ss) ss.innerText = 'saved';
-            setTimeout(() => { if(ss) ss.innerText = 'synced'; }, 1000);
-            updateStats();
-        }
+        // ---------- 2. Helper: update word/char count ----------
         function updateStats() {
             const text = quill.getText();
-            const words = text.trim().split(/\s+/).filter(w=>w.length).length;
-            const wc = document.getElementById('wordCount');
-            const cc = document.getElementById('charCount');
-            if (wc) wc.innerText = words;
-            if (cc) cc.innerText = text.length;
+            const chars = text.length;
+            const words = text.trim().split(/\s+/).filter(w => w.length).length;
+            document.getElementById('wordCount').innerText = words;
+            document.getElementById('charCount').innerText = chars;
         }
-        quill.on('text-change', saveLocal);
+
+        // ---------- 3. Auto-save to localStorage ----------
+        const STORAGE_KEY = 'kuripedu_minimal';
+        function saveToLocal() {
+            const content = quill.root.innerHTML;
+            localStorage.setItem(STORAGE_KEY, content);
+            updateStats();
+            // visual feedback on save status (the bar text)
+            const statusSpan = document.querySelector('.status-bar span:first-child');
+            if (statusSpan) {
+                const originalHtml = statusSpan.innerHTML;
+                statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved!';
+                setTimeout(() => {
+                    if (statusSpan) statusSpan.innerHTML = '<i class="fas fa-save"></i> Auto-saved';
+                }, 1200);
+            }
+        }
         function loadFromLocal() {
-            const saved = localStorage.getItem('kuripedu_data');
-            if (saved && saved !== '<p><br></p>') quill.root.innerHTML = saved;
-            else {
-                quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code.\n🧠 Click "Deep Work" for fullscreen focus.');
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved && saved !== '<p><br></p>') {
+                quill.root.innerHTML = saved;
+            } else {
+                quill.setText('✨ Welcome to Kuripedu ✨\n\n• Write anything – notes, lists, ideas.\n• Click "Deep Work" for fullscreen focus (hides all UI).\n• Change theme, font size, and line height.\n• Export your note as HTML.\n• Everything auto-saves in your browser.\n\nHappy writing!');
             }
             updateStats();
         }
-
-        // ---------- 5. Theme Toggle ----------
-        let themeIdx = 0;
-        const themes = ['light', 'dark', 'sepia'];
-        const savedTheme = localStorage.getItem('themePref');
-        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx = 1; }
-        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx = 2; }
-        document.getElementById('themeToggleBtn').addEventListener('click', () => {
-            themeIdx = (themeIdx+1)%3;
-            document.body.classList.remove('dark', 'sepia');
-            if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
-            if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
-            localStorage.setItem('themePref', themes[themeIdx]);
+        quill.on('text-change', () => {
+            saveToLocal();
         });
 
-        // ---------- 6. Font & Line Height ----------
+        // ---------- 4. Theme Toggle (light / dark / sepia) ----------
+        let themeIndex = 0;
+        const themes = ['light', 'dark', 'sepia'];
+        const savedTheme = localStorage.getItem('kuripedu_theme');
+        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIndex = 1; }
+        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex = 2; }
+        document.getElementById('themeToggleBtn').addEventListener('click', () => {
+            themeIndex = (themeIndex + 1) % 3;
+            document.body.classList.remove('dark', 'sepia');
+            if (themes[themeIndex] === 'dark') document.body.classList.add('dark');
+            if (themes[themeIndex] === 'sepia') document.body.classList.add('sepia');
+            localStorage.setItem('kuripedu_theme', themes[themeIndex]);
+        });
+
+        // ---------- 5. Font size & Line height controls (apply to editor) ----------
         const fontSelect = document.getElementById('fontSelect');
         const lineSelect = document.getElementById('lineHeightSelect');
         function applyEditorStyle() {
-            const editorRoot = document.querySelector('.ql-editor');
-            if (editorRoot) {
-                editorRoot.style.fontSize = fontSelect.value;
-                editorRoot.style.lineHeight = lineSelect.value;
+            const editorContent = document.querySelector('.ql-editor');
+            if (editorContent) {
+                editorContent.style.fontSize = fontSelect.value;
+                editorContent.style.lineHeight = lineSelect.value;
             }
         }
         fontSelect.addEventListener('change', applyEditorStyle);
         lineSelect.addEventListener('change', applyEditorStyle);
-        applyEditorStyle();
+        // set initial style after load
+        setTimeout(applyEditorStyle, 100);
 
-        // ---------- 7. Export HTML ----------
-        document.getElementById('exportHtmlBtn').addEventListener('click', () => {
+        // ---------- 6. Export as HTML file ----------
+        document.getElementById('exportBtn').addEventListener('click', () => {
             const content = quill.root.innerHTML;
-            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table,th,td{border:1px solid #ccc;border-collapse:collapse;padding:6px;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], {type: 'text/html'});
+            const style = document.querySelector('style').innerHTML;
+            const fullHtml = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Kuripedu_Export</title>
+    <style>
+        body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 2rem; max-width: 900px; margin: 0 auto; line-height: 1.6; }
+        h1 { color: #3b82f6; }
+        .ql-editor { font-size: 1rem; }
+    </style>
+</head>
+<body>
+<h1>📝 Kuripedu Export</h1>
+${content}
+</body>
+</html>`;
+            const blob = new Blob([fullHtml], { type: 'text/html' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             link.download = `kuripedu_${Date.now()}.html`;
@@ -558,59 +296,45 @@
             URL.revokeObjectURL(link.href);
         });
 
-        // ---------- 8. Share Link & QR ----------
-        const shareBtn = document.getElementById('shareRoomBtn');
-        const qrBtn = document.getElementById('showQrBtn');
-        const qrArea = document.getElementById('qrSyncArea');
-        function getRoomUrl() {
-            let url = new URL(window.location.href);
-            url.searchParams.set('room', roomName);
-            return url.toString();
-        }
-        shareBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Collaboration link copied!')).catch(() => alert('Could not copy'));
-        });
-        qrBtn.addEventListener('click', () => {
-            qrArea.style.display = qrArea.style.display === 'none' ? 'flex' : 'none';
-            if (qrArea.style.display === 'flex') {
-                const qrDiv = document.getElementById('qrcode');
-                qrDiv.innerHTML = '';
-                new QRCode(qrDiv, { text: getRoomUrl(), width: 120, height: 120 });
-            }
-        });
-
-        // ---------- 9. Deep Work Mode (Fullscreen + Hide UI) ----------
+        // ---------- 7. Deep Work Mode (fullscreen + hide all UI except editor) ----------
         const deepBtn = document.getElementById('deepWorkBtn');
         let isDeep = false;
         function toggleDeepWork() {
             if (!isDeep) {
+                // Enter deep work mode
                 document.body.classList.add('deep-work');
                 const elem = document.documentElement;
-                if (elem.requestFullscreen) elem.requestFullscreen().catch(e => console.warn(e));
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => console.warn('Fullscreen error:', err));
+                }
                 deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
                 isDeep = true;
             } else {
+                // Exit deep work mode
                 document.body.classList.remove('deep-work');
-                if (document.exitFullscreen) document.exitFullscreen().catch(e => console.warn(e));
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => console.warn('Exit fullscreen error:', err));
+                }
                 deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
             }
         }
         deepBtn.addEventListener('click', toggleDeepWork);
+        // Listen for fullscreen change (if user presses ESC)
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isDeep) {
+                // User exited fullscreen via ESC
                 document.body.classList.remove('deep-work');
                 deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
             }
         });
 
-        // ---------- 10. Start Everything ----------
-        window.addEventListener('load', () => {
-            loadFromLocal();
-            initCollab();
-            setInterval(saveLocal, 3000);
-        });
+        // ---------- 8. Load saved data on start ----------
+        loadFromLocal();
+
+        // Optional: periodic save backup (every 30s)
+        setInterval(saveToLocal, 30000);
     })();
 </script>
 </body>
