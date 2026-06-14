@@ -3,11 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Collaborative Notepad (Fully Fixed)</title>
-    <!-- Quill Editor -->
+    <title>Kuripedu · Collaborative Notepad (Stable)</title>
+    <!-- Quill Editor (standard CDN) -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
-    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    <!-- Yjs + Collaboration Providers (load order matters) -->
+    <!-- Yjs + Collaboration Providers (using reliable CDNs) -->
     <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
@@ -117,10 +116,17 @@
             justify-content: space-between;
             font-size: 0.75rem;
         }
+        .error-msg {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 0.8rem;
+            margin: 1rem;
+            border-radius: 1rem;
+            text-align: center;
+        }
         @media (max-width: 700px) {
             .notepad-header { flex-direction: column; align-items: stretch; }
         }
-        /* Deep work styles (applied via JS) */
         body.deep-work .notepad-header,
         body.deep-work .sync-panel,
         body.deep-work .status-bar,
@@ -178,10 +184,9 @@
 </div>
 
 <script>
-    // Wait for DOM and all external scripts to be ready
-    window.addEventListener('DOMContentLoaded', function() {
-        // Check if required globals exist
-        function dependenciesReady() {
+    (function() {
+        // Helper: check if all required libraries are loaded
+        function librariesReady() {
             return (typeof Y !== 'undefined' && 
                     typeof YWebRTC !== 'undefined' && 
                     typeof Quill !== 'undefined' && 
@@ -189,21 +194,33 @@
                     typeof QRCode !== 'undefined');
         }
         
-        if (!dependenciesReady()) {
-            console.warn("Waiting for libraries...");
-            setTimeout(function checkAgain() {
-                if (dependenciesReady()) {
-                    initApp();
-                } else {
-                    setTimeout(checkAgain, 100);
-                }
-            }, 100);
-            return;
+        // Show error and retry button if libraries fail to load
+        function showLibraryError() {
+            const editorDiv = document.getElementById('quillEditor');
+            if (editorDiv) {
+                editorDiv.innerHTML = '<div class="error-msg"><i class="fas fa-exclamation-triangle"></i> Failed to load collaboration libraries.<br>Check your internet connection and <button id="reloadBtn" style="margin-top:0.5rem;">Refresh Page</button></div>';
+                const reloadBtn = document.getElementById('reloadBtn');
+                if (reloadBtn) reloadBtn.onclick = () => location.reload();
+            }
         }
         
-        initApp();
+        // Wait for libraries with a timeout
+        let attempts = 0;
+        const maxAttempts = 30; // 3 seconds (100ms each)
+        function waitForLibraries() {
+            if (librariesReady()) {
+                startApp();
+                return;
+            }
+            attempts++;
+            if (attempts >= maxAttempts) {
+                showLibraryError();
+                return;
+            }
+            setTimeout(waitForLibraries, 100);
+        }
         
-        function initApp() {
+        function startApp() {
             // ------------------------------
             // 1. Room ID from URL or generate
             // ------------------------------
@@ -217,9 +234,8 @@
             }
             
             // ------------------------------
-            // 2. Quill + Yjs binding
+            // 2. Initialize Quill
             // ------------------------------
-            const ydoc = new Y.Doc();
             const quill = new Quill('#quillEditor', {
                 theme: 'snow',
                 placeholder: 'Start writing – changes appear in real time!\nOpen this page in another browser window to test collaboration.',
@@ -232,10 +248,15 @@
                     ]
                 }
             });
+            
+            // ------------------------------
+            // 3. Yjs document and binding
+            // ------------------------------
+            const ydoc = new Y.Doc();
             const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
             
             // ------------------------------
-            // 3. Collaboration with fallback signaling servers
+            // 4. Collaboration with fallback signaling servers
             // ------------------------------
             const signalingServers = [
                 'wss://y-webrtc-signaling-eu.herokuapp.com',
@@ -251,12 +272,11 @@
                     try { provider.disconnect(); provider.destroy(); } catch(e) {}
                 }
                 if (currentServerIndex >= signalingServers.length) {
-                    document.getElementById('roomStatus').innerHTML = '🔴 No server available';
+                    document.getElementById('roomStatus').innerHTML = '🔴 No server';
                     document.getElementById('roomStatus').style.background = '#ef4444';
                     return;
                 }
                 const server = signalingServers[currentServerIndex];
-                console.log(`Trying signaling server: ${server}`);
                 document.getElementById('roomStatus').innerHTML = `🟡 Trying ${server.split('/')[2]}...`;
                 document.getElementById('roomStatus').style.background = '#eab308';
                 try {
@@ -285,7 +305,7 @@
             tryNextSignalingServer();
             
             // ------------------------------
-            // 4. Local backup & stats
+            // 5. Local backup & stats
             // ------------------------------
             const STORAGE_KEY = 'kuripedu_backup';
             function updateStats() {
@@ -318,7 +338,7 @@
             setInterval(saveBackup, 10000);
             
             // ------------------------------
-            // 5. Theme
+            // 6. Theme switcher
             // ------------------------------
             let themeIdx = 0;
             const themes = ['light', 'dark', 'sepia'];
@@ -334,7 +354,7 @@
             });
             
             // ------------------------------
-            // 6. Font & line height
+            // 7. Font & line height
             // ------------------------------
             const fontSelect = document.getElementById('fontSelect');
             const lineSelect = document.getElementById('lineHeightSelect');
@@ -350,7 +370,7 @@
             setTimeout(applyEditorStyle, 100);
             
             // ------------------------------
-            // 7. Export
+            // 8. Export
             // ------------------------------
             document.getElementById('exportBtn').addEventListener('click', () => {
                 const content = quill.root.innerHTML;
@@ -363,7 +383,7 @@
             });
             
             // ------------------------------
-            // 8. Deep Work Mode
+            // 9. Deep Work Mode
             // ------------------------------
             let isDeep = false;
             const deepBtn = document.getElementById('deepWorkBtn');
@@ -391,7 +411,7 @@
             });
             
             // ------------------------------
-            // 9. Share Link & QR Code (fixed)
+            // 10. Share Link & QR Code (fully fixed)
             // ------------------------------
             const shareBtn = document.getElementById('shareLinkBtn');
             const qrBtn = document.getElementById('showQrBtn');
@@ -405,7 +425,8 @@
             }
             
             shareBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied! Share it with others.')).catch(() => alert('Copy manually: ' + getRoomUrl()));
+                const url = getRoomUrl();
+                navigator.clipboard.writeText(url).then(() => alert('Room link copied! Share it with others.')).catch(() => alert('Copy manually: ' + url));
             });
             
             let qrGenerated = false;
@@ -425,7 +446,7 @@
                             });
                             qrGenerated = true;
                         } catch(e) {
-                            console.error("QR error:", e);
+                            console.error("QR generation error:", e);
                             qrDiv.innerHTML = '<p style="color:red;">QR failed, but link works:<br><small>' + getRoomUrl() + '</small></p>';
                         }
                     }
@@ -437,7 +458,10 @@
             });
             qrContainer.style.display = 'none';
         }
-    });
+        
+        // Start polling for libraries
+        waitForLibraries();
+    })();
 </script>
 </body>
 </html>
