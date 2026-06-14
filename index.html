@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Smart Notepad (Collab Ready)</title>
-    <!-- Font Awesome (lightweight) -->
+    <title>Kuripedu · Rich Text Editor + Optional Collab</title>
+    <!-- Quill CSS + JS (always loaded for toolbar) -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -57,8 +60,8 @@
             color: var(--text-main);
         }
         button:hover { background: var(--accent); color: white; border-color: var(--accent); }
-        #editorContainer { min-height: 450px; padding: 1rem; background: var(--bg-panel); overflow-y: auto; }
-        .ql-editor { min-height: 400px; font-family: inherit; }
+        .ql-container { font-size: 0.95rem; }
+        .ql-editor { min-height: 450px; }
         .sync-panel {
             background: var(--bg-panel);
             border-top: 1px solid var(--border);
@@ -73,10 +76,8 @@
         .status-badge { background: var(--accent); color: white; border-radius: 1rem; padding: 0.2rem 0.7rem; font-size: 0.7rem; }
         .qr-area { display: none; margin-top: 0.5rem; padding: 0.5rem; background: white; border-radius: 0.8rem; width: fit-content; text-align: center; }
         .status-bar { padding: 0.6rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.75rem; }
-        .error-box { background: #fee2e2; color: #991b1b; padding: 1rem; margin: 1rem; border-radius: 1rem; text-align: center; }
-        .retry-btn { background: var(--accent); color: white; border: none; padding: 0.5rem 1rem; border-radius: 2rem; cursor: pointer; margin-top: 0.5rem; }
         body.deep-work .notepad-header, body.deep-work .sync-panel, body.deep-work .status-bar, body.deep-work .ql-toolbar { display: none !important; }
-        body.deep-work #editorContainer { min-height: 100vh !important; padding: 1rem; }
+        body.deep-work .ql-editor { min-height: 100vh !important; }
         body.deep-work .app-container, body.deep-work .notepad-card { max-width: 100% !important; margin: 0 !important; border-radius: 0 !important; border: none !important; }
     </style>
 </head>
@@ -84,7 +85,7 @@
 <div class="app-container">
     <div class="notepad-card">
         <div class="notepad-header">
-            <h1><i class="fas fa-pen-fancy"></i> Kuripedu · Smart Pad</h1>
+            <h1><i class="fas fa-pen-fancy"></i> Kuripedu · Rich Text</h1>
             <div class="toolbar-group">
                 <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
                 <button id="themeBtn"><i class="fas fa-palette"></i> Theme</button>
@@ -93,9 +94,9 @@
                 <button id="exportBtn"><i class="fas fa-download"></i> Export</button>
             </div>
         </div>
-        <div id="editorContainer" contenteditable="true" style="outline: none;"></div>
+        <div id="editorContainer"></div>
         <div class="sync-panel">
-            <div><span><i class="fas fa-globe"></i> Mode: </span><span id="modeStatus" class="status-badge">🟢 Offline (saving locally)</span></div>
+            <div><span><i class="fas fa-globe"></i> Mode: </span><span id="modeStatus" class="status-badge">📝 Rich Editor (local)</span></div>
             <div><button id="shareLinkBtn" disabled><i class="fas fa-link"></i> Copy Link</button><button id="showQrBtn" disabled><i class="fas fa-qrcode"></i> QR</button></div>
             <div id="qrContainer" class="qr-area"><div id="qrcode"></div><small>Share this link</small></div>
         </div>
@@ -104,39 +105,58 @@
 </div>
 
 <script>
-    // ---------- SIMPLE TEXT EDITOR (FALLBACK) ----------
-    const editor = document.getElementById('editorContainer');
-    const STORAGE_KEY = 'kuripedu_simple';
-    let currentHtml = '';
+    // ---------- 1. Initialize Quill with full toolbar (ALWAYS visible) ----------
+    const quill = new Quill('#editorContainer', {
+        theme: 'snow',
+        placeholder: 'Start writing... Text formatting toolbar is always available.',
+        modules: {
+            toolbar: [
+                [{ 'header': [1, 2, 3, false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                ['link', 'clean']
+            ]
+        }
+    });
 
+    // ---------- 2. Auto-save to localStorage ----------
+    const STORAGE_KEY = 'kuripedu_quill';
+    function saveToLocal() {
+        localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
+        updateStats();
+        const statusSpan = document.querySelector('.status-bar span:first-child');
+        if (statusSpan) {
+            const orig = statusSpan.innerHTML;
+            statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
+            setTimeout(() => { statusSpan.innerHTML = orig; }, 1000);
+        }
+    }
+    function loadFromLocal() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved && saved !== '<p><br></p>') {
+            quill.root.innerHTML = saved;
+        } else {
+            quill.setText('✨ Welcome to Kuripedu ✨\n\n• Use the toolbar above for bold, italic, lists, and links.\n• Click "Deep Work" for fullscreen focus (hides all UI).\n• Change theme, font size, and line height.\n• Export your note as HTML.\n• Everything auto-saves in your browser.\n\nIf collaboration libraries load, sharing buttons will appear.');
+        }
+        updateStats();
+    }
     function updateStats() {
-        const text = editor.innerText || '';
+        const text = quill.getText();
         const chars = text.length;
         const words = text.trim().split(/\s+/).filter(w => w.length).length;
         document.getElementById('wordCount').innerText = words;
         document.getElementById('charCount').innerText = chars;
     }
-    function saveToLocal() {
-        localStorage.setItem(STORAGE_KEY, editor.innerHTML);
-        updateStats();
-        const span = document.querySelector('.status-bar span:first-child');
-        if (span) { const orig = span.innerHTML; span.innerHTML = '<i class="fas fa-check"></i> Saved'; setTimeout(() => { span.innerHTML = orig; }, 1000); }
-    }
-    function loadFromLocal() {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved && saved !== '<br>') editor.innerHTML = saved;
-        else editor.innerHTML = '<div>✨ Welcome to Kuripedu ✨<br><br>• Write anything – it auto-saves.<br>• Click "Deep Work" for fullscreen focus.<br>• Change theme, font size, line height.<br>• Export as HTML.<br><br>If collaboration libraries load, sharing buttons will appear.</div>';
-        updateStats();
-    }
-    editor.addEventListener('input', saveToLocal);
+    quill.on('text-change', saveToLocal);
     loadFromLocal();
     setInterval(saveToLocal, 10000);
 
-    // UI controls
+    // ---------- 3. UI Controls ----------
+    // Theme
     document.getElementById('themeBtn').addEventListener('click', () => {
         const themes = ['light', 'dark', 'sepia'];
         let idx = localStorage.getItem('themeIdx') ? parseInt(localStorage.getItem('themeIdx')) : 0;
-        idx = (idx+1)%3;
+        idx = (idx + 1) % 3;
         document.body.classList.remove('dark', 'sepia');
         if (themes[idx] === 'dark') document.body.classList.add('dark');
         if (themes[idx] === 'sepia') document.body.classList.add('sepia');
@@ -146,27 +166,57 @@
     if (savedIdx === '1') document.body.classList.add('dark');
     if (savedIdx === '2') document.body.classList.add('sepia');
 
+    // Font & line height for Quill editor
     const fontSelect = document.getElementById('fontSelect');
     const lineSelect = document.getElementById('lineHeightSelect');
-    function applyStyle() { editor.style.fontSize = fontSelect.value; editor.style.lineHeight = lineSelect.value; }
-    fontSelect.addEventListener('change', applyStyle);
-    lineSelect.addEventListener('change', applyStyle);
-    applyStyle();
+    function applyEditorStyle() {
+        const editorRoot = document.querySelector('.ql-editor');
+        if (editorRoot) {
+            editorRoot.style.fontSize = fontSelect.value;
+            editorRoot.style.lineHeight = lineSelect.value;
+        }
+    }
+    fontSelect.addEventListener('change', applyEditorStyle);
+    lineSelect.addEventListener('change', applyEditorStyle);
+    setTimeout(applyEditorStyle, 100);
 
+    // Export
     document.getElementById('exportBtn').addEventListener('click', () => {
-        const content = editor.innerHTML;
-        const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title></head><body>${content}</body></html>`], {type:'text/html'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kuripedu_${Date.now()}.html`; a.click(); URL.revokeObjectURL(a.href);
+        const content = quill.root.innerHTML;
+        const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title><style>body{font-family:sans-serif;padding:2rem;}</style></head><body>${content}</body></html>`], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `kuripedu_${Date.now()}.html`;
+        a.click();
+        URL.revokeObjectURL(a.href);
     });
 
+    // Deep Work Mode
     let isDeep = false;
-    document.getElementById('deepWorkBtn').addEventListener('click', () => {
-        if (!isDeep) { document.body.classList.add('deep-work'); document.documentElement.requestFullscreen(); isDeep=true; }
-        else { document.body.classList.remove('deep-work'); document.exitFullscreen(); isDeep=false; }
+    const deepBtn = document.getElementById('deepWorkBtn');
+    function toggleDeepWork() {
+        if (!isDeep) {
+            document.body.classList.add('deep-work');
+            document.documentElement.requestFullscreen().catch(e => console.warn(e));
+            deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
+            isDeep = true;
+        } else {
+            document.body.classList.remove('deep-work');
+            document.exitFullscreen().catch(e => console.warn(e));
+            deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+            isDeep = false;
+        }
+    }
+    deepBtn.addEventListener('click', toggleDeepWork);
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && isDeep) {
+            document.body.classList.remove('deep-work');
+            deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+            isDeep = false;
+        }
     });
-    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isDeep) { document.body.classList.remove('deep-work'); isDeep=false; } });
 
-    // ---------- LOAD COLLABORATION LIBRARIES WITH RETRY ----------
+    // ---------- 4. Optional Collaboration Upgrade (loads async) ----------
     function loadScript(src, fallbackSrc) {
         return new Promise((resolve, reject) => {
             const script = document.createElement('script');
@@ -177,7 +227,7 @@
                     const fallback = document.createElement('script');
                     fallback.src = fallbackSrc;
                     fallback.onload = () => resolve();
-                    fallback.onerror = () => reject(new Error(`Failed to load ${src} and ${fallbackSrc}`));
+                    fallback.onerror = () => reject(new Error(`Failed to load ${src}`));
                     document.head.appendChild(fallback);
                 } else reject(new Error(`Failed to load ${src}`));
             };
@@ -185,54 +235,22 @@
         });
     }
 
-    async function loadCollaboration() {
+    async function upgradeToCollaborative() {
         try {
-            // Try multiple CDNs for each library
             await loadScript('https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js', 'https://unpkg.com/yjs@13.6.15/dist/y.min.js');
             await loadScript('https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js', 'https://unpkg.com/y-webrtc@10.2.5/dist/y-webrtc.min.js');
-            await loadScript('https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js', 'https://unpkg.com/quill@1.3.7/dist/quill.min.js');
             await loadScript('https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js', 'https://unpkg.com/y-quill@0.2.0/dist/y-quill.min.js');
             await loadScript('https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js', 'https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js');
-            return true;
         } catch(e) {
-            console.warn("Collaboration libraries failed to load:", e);
-            return false;
+            console.warn("Collaboration libraries not available, staying in local mode.");
+            document.getElementById('modeStatus').innerHTML = '📝 Local only';
+            return;
         }
-    }
 
-    // After DOM, try to load and upgrade editor
-    window.addEventListener('DOMContentLoaded', async () => {
-        const success = await loadCollaboration();
-        if (success && typeof Y !== 'undefined' && typeof Quill !== 'undefined') {
-            // Upgrade to collaborative editor
-            upgradeToCollaborative();
-        } else {
-            document.getElementById('modeStatus').innerHTML = '⚡ Offline Mode (collab unavailable)';
-            document.getElementById('modeStatus').style.background = '#6b7280';
-            // keep simple editor
-        }
-    });
-
-    async function upgradeToCollaborative() {
-        // Replace contenteditable with Quill
-        const container = document.getElementById('editorContainer');
-        const oldContent = container.innerHTML;
-        const newDiv = document.createElement('div');
-        newDiv.id = 'quillEditor';
-        container.parentNode.replaceChild(newDiv, container);
-        newDiv.style.minHeight = '450px';
-        
-        const quill = new Quill('#quillEditor', {
-            theme: 'snow',
-            placeholder: 'Collaborative editing active! Share the link.',
-            modules: { toolbar: [['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link','clean']] }
-        });
-        if (oldContent && oldContent !== '<br>') quill.root.innerHTML = oldContent;
-        
+        // Libraries loaded – upgrade to collaborative
         const ydoc = new Y.Doc();
         const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
         
-        // Room from URL
         const urlParams = new URLSearchParams(window.location.search);
         let roomName = urlParams.get('room');
         if (!roomName) {
@@ -258,15 +276,12 @@
                 if (status.connected) document.getElementById('modeStatus').innerHTML = '🟢 Live Collab';
                 else document.getElementById('modeStatus').innerHTML = '🔴 Disconnected';
             });
-            provider.on('peers', (peers) => { document.getElementById('modeStatus').innerHTML = peers.size ? `🟢 ${peers.size} online` : '🟢 Alone'; });
+            provider.on('peers', (peers) => {
+                document.getElementById('modeStatus').innerHTML = peers.size ? `🟢 ${peers.size} online` : '🟢 Alone';
+            });
             provider.on('connection-error', () => { serverIndex++; connect(); });
         }
         connect();
-        
-        // Auto-save to local (backup)
-        function saveBackup() { localStorage.setItem(STORAGE_KEY, quill.root.innerHTML); }
-        quill.on('text-change', saveBackup);
-        setInterval(saveBackup, 10000);
         
         // Enable share buttons
         const shareBtn = document.getElementById('shareLinkBtn');
@@ -278,12 +293,12 @@
             url.searchParams.set('room', roomName);
             navigator.clipboard.writeText(url.toString()).then(() => alert('Room link copied!'));
         };
+        const qrContainer = document.getElementById('qrContainer');
+        const qrDiv = document.getElementById('qrcode');
         let qrShown = false;
         qrBtn.onclick = () => {
-            const qrContainer = document.getElementById('qrContainer');
             if (!qrShown) {
                 qrContainer.style.display = 'block';
-                const qrDiv = document.getElementById('qrcode');
                 qrDiv.innerHTML = '';
                 const url = new URL(window.location.href);
                 url.searchParams.set('room', roomName);
@@ -296,50 +311,12 @@
                 qrShown = false;
             }
         };
-        qrBtn.onclick(); // just to set initial state? we'll call later
-        // reset
-        qrShown = false;
-        qrContainer.style.display = 'none';
-        qrBtn.onclick = () => {
-            if (qrContainer.style.display === 'none') {
-                qrContainer.style.display = 'block';
-                if (!qrShown) {
-                    const qrDiv = document.getElementById('qrcode');
-                    qrDiv.innerHTML = '';
-                    const url = new URL(window.location.href);
-                    url.searchParams.set('room', roomName);
-                    new QRCode(qrDiv, { text: url.toString(), width: 120, height: 120 });
-                    qrShown = true;
-                }
-                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
-            } else {
-                qrContainer.style.display = 'none';
-                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
-            }
-        };
-        
-        // Update stats for Quill
-        function updateQuillStats() {
-            const text = quill.getText();
-            const words = text.trim().split(/\s+/).filter(w=>w.length).length;
-            document.getElementById('wordCount').innerText = words;
-            document.getElementById('charCount').innerText = text.length;
-        }
-        quill.on('text-change', updateQuillStats);
-        updateQuillStats();
-        
-        // Override export to use Quill content
-        document.getElementById('exportBtn').onclick = () => {
-            const content = quill.root.innerHTML;
-            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title></head><body>${content}</body></html>`], {type:'text/html'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kuripedu_${Date.now()}.html`; a.click(); URL.revokeObjectURL(a.href);
-        };
-        
-        // Re-apply font/line height to Quill editor
-        fontSelect.onchange = () => { const editorDiv = document.querySelector('.ql-editor'); if(editorDiv) editorDiv.style.fontSize = fontSelect.value; };
-        lineSelect.onchange = () => { const editorDiv = document.querySelector('.ql-editor'); if(editorDiv) editorDiv.style.lineHeight = lineSelect.value; };
-        setTimeout(() => { const ed = document.querySelector('.ql-editor'); if(ed) { ed.style.fontSize = fontSelect.value; ed.style.lineHeight = lineSelect.value; } }, 200);
     }
+
+    // Try to upgrade after DOM is ready
+    window.addEventListener('DOMContentLoaded', () => {
+        setTimeout(upgradeToCollaborative, 500);
+    });
 </script>
 </body>
 </html>
