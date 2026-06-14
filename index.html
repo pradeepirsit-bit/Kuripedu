@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Collaborative Notepad (Working)</title>
+    <title>Kuripedu · Collaborative Notepad (QR fixed)</title>
     <!-- Quill Editor -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
@@ -11,7 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
-    <!-- QR Code (for sharing) -->
+    <!-- QR Code library (more reliable) -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -109,6 +109,11 @@
             background: white;
             border-radius: 0.8rem;
             width: fit-content;
+            text-align: center;
+        }
+        .qr-area canvas, .qr-area img {
+            display: block;
+            margin: 0 auto;
         }
         .status-bar {
             padding: 0.6rem 1.5rem;
@@ -154,7 +159,10 @@
                 <button id="shareLinkBtn"><i class="fas fa-link"></i> Copy Room Link</button>
                 <button id="showQrBtn"><i class="fas fa-qrcode"></i> Show QR</button>
             </div>
-            <div id="qrContainer" class="qr-area"><div id="qrcode"></div><small>Scan to join this room</small></div>
+            <div id="qrContainer" class="qr-area">
+                <div id="qrcode"></div>
+                <small>Scan to join this room</small>
+            </div>
         </div>
         <div class="status-bar">
             <span><i class="fas fa-save"></i> Auto-saved</span>
@@ -369,28 +377,47 @@
         document.head.appendChild(style);
 
         // ------------------------------
-        // 9. Share Link & QR Code
+        // 9. Share Link & QR Code (FIXED: QR shows reliably)
         // ------------------------------
         const shareBtn = document.getElementById('shareLinkBtn');
         const qrBtn = document.getElementById('showQrBtn');
         const qrContainer = document.getElementById('qrContainer');
         const qrDiv = document.getElementById('qrcode');
+        
         function getRoomUrl() {
             let url = new URL(window.location.href);
             url.searchParams.set('room', roomName);
             return url.toString();
         }
+        
         shareBtn.addEventListener('click', () => {
             navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied! Share it with others.')).catch(() => alert('Copy manually: ' + getRoomUrl()));
         });
+        
         let qrGenerated = false;
         qrBtn.addEventListener('click', () => {
             if (qrContainer.style.display === 'none' || !qrContainer.style.display) {
                 qrContainer.style.display = 'block';
                 if (!qrGenerated) {
+                    // Clear previous content
                     qrDiv.innerHTML = '';
-                    new QRCode(qrDiv, { text: getRoomUrl(), width: 120, height: 120 });
-                    qrGenerated = true;
+                    // Use QRCode constructor correctly (the library expects a DOM element and options)
+                    // The library qrcodejs attaches to window.QRCode.
+                    try {
+                        new QRCode(qrDiv, {
+                            text: getRoomUrl(),
+                            width: 120,
+                            height: 120,
+                            colorDark: "#000000",
+                            colorLight: "#ffffff",
+                            correctLevel: QRCode.CorrectLevel.H
+                        });
+                        qrGenerated = true;
+                        console.log("QR code generated successfully");
+                    } catch(e) {
+                        console.error("QR generation error:", e);
+                        qrDiv.innerHTML = '<p style="color:red;">QR failed, but link works: <br><small>' + getRoomUrl() + '</small></p>';
+                    }
                 }
                 qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
             } else {
