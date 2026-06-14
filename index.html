@@ -3,17 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Kuripedu · Collaborative Notepad</title>
-    <!-- Quill rich text editor -->
+    <title>Kuripedu · Simple Notepad</title>
+    <!-- Quill rich text editor (lightweight, reliable) -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    <!-- Yjs ecosystem for collaboration -->
-    <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
-    <!-- QR Code generation -->
-    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <!-- Font Awesome -->
+    <!-- Font Awesome icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * {
@@ -54,9 +48,8 @@
             transition: background 0.2s, color 0.2s;
             padding: 1rem;
         }
-        /* Deep Work Mode: hide UI except editor */
+        /* Deep Work Mode: hide everything except the editor */
         body.deep-work .notepad-header,
-        body.deep-work .sync-panel,
         body.deep-work .status-bar,
         body.deep-work .ql-toolbar {
             display: none !important;
@@ -138,44 +131,10 @@
             padding: 1rem 1.5rem 1.5rem;
         }
         #quillEditor {
-            min-height: 400px;
+            min-height: 450px;
         }
         .ql-container {
             font-size: 0.95rem;
-        }
-        .sync-panel {
-            background: var(--bg-panel);
-            border-top: 1px solid var(--border);
-            border-bottom: 1px solid var(--border);
-            padding: 0.6rem 1.5rem;
-            display: flex;
-            flex-wrap: wrap;
-            justify-content: space-between;
-            align-items: center;
-            gap: 0.8rem;
-            font-size: 0.8rem;
-        }
-        .sync-status {
-            display: flex;
-            align-items: center;
-            gap: 1rem;
-            flex-wrap: wrap;
-        }
-        .badge {
-            background: var(--accent);
-            color: white;
-            border-radius: 1rem;
-            padding: 0.2rem 0.7rem;
-            font-size: 0.7rem;
-        }
-        .qr-area {
-            display: none;
-            margin-top: 0.5rem;
-            padding: 0.5rem;
-            background: var(--bg-panel);
-            border-radius: 0.8rem;
-            border: 1px solid var(--border);
-            width: fit-content;
         }
         .status-bar {
             padding: 0.6rem 1.5rem;
@@ -190,7 +149,6 @@
         @media (max-width: 700px) {
             .notepad-header { flex-direction: column; align-items: stretch; }
             body { padding: 0.5rem; }
-            .sync-panel { flex-direction: column; align-items: stretch; }
         }
     </style>
 </head>
@@ -198,7 +156,7 @@
 <div class="app-container">
     <div class="notepad-card">
         <div class="notepad-header">
-            <h1><i class="fas fa-users"></i> Kuripedu · Collaborative</h1>
+            <h1><i class="fas fa-pen-fancy"></i> Kuripedu · குறிப்பேடு</h1>
             <div class="toolbar-group">
                 <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
                 <button id="themeToggleBtn"><i class="fas fa-palette"></i> Theme</button>
@@ -220,21 +178,6 @@
         <div class="editor-wrapper">
             <div id="quillEditor"></div>
         </div>
-        <div class="sync-panel">
-            <div class="sync-status">
-                <span><i class="fas fa-globe"></i> Real-time collab</span>
-                <span id="roomStatus" class="badge">🟢 Connecting...</span>
-                <span><i class="fas fa-user-friends"></i> <span id="peerCount">0</span> online</span>
-            </div>
-            <div style="display: flex; gap: 0.5rem;">
-                <button id="shareLinkBtn"><i class="fas fa-link"></i> Copy invite link</button>
-                <button id="showQrBtn"><i class="fas fa-qrcode"></i> Show QR</button>
-            </div>
-            <div id="qrContainer" class="qr-area">
-                <div id="qrcode"></div>
-                <small style="margin-top: 0.3rem; display: block;">Scan to join this room</small>
-            </div>
-        </div>
         <div class="status-bar">
             <span><i class="fas fa-save"></i> Auto-saved</span>
             <span><i class="fas fa-chart-line"></i> Words: <span id="wordCount">0</span> | Characters: <span id="charCount">0</span></span>
@@ -244,130 +187,91 @@
 
 <script>
     (function() {
-        // No auto-reload loops. We'll just wait for libraries gracefully.
-        let initialized = false;
-        
-        function initApp() {
-            if (initialized) return;
-            if (typeof Y === 'undefined' || typeof YWebRTC === 'undefined' || typeof QuillBinding === 'undefined') {
-                console.warn("Waiting for collaboration libraries...");
-                setTimeout(initApp, 200);
-                return;
+        // ---------- 1. Initialize Quill (simple, reliable) ----------
+        const quill = new Quill('#quillEditor', {
+            theme: 'snow',
+            placeholder: 'Start writing... Your notes are automatically saved.',
+            modules: {
+                toolbar: [
+                    [{ 'header': [1, 2, 3, false] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    ['link', 'clean']
+                ]
             }
-            initialized = true;
-            
-            // ---------- 1. Initialize Quill ----------
-            const quill = new Quill('#quillEditor', {
-                theme: 'snow',
-                placeholder: 'Write anything – your changes sync live with others.\nShare the link or QR code to collaborate.',
-                modules: {
-                    toolbar: [
-                        [{ 'header': [1,2,3,false] }],
-                        ['bold', 'italic', 'underline', 'strike'],
-                        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
-                        ['link', 'clean']
-                    ]
-                }
-            });
+        });
 
-            // ---------- 2. Setup Yjs & WebRTC collaboration ----------
-            const ydoc = new Y.Doc();
-            const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
-            
-            // Generate a unique room name
-            const urlParams = new URLSearchParams(window.location.search);
-            let roomName = urlParams.get('room');
-            if (!roomName) {
-                roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
-                const newUrl = new URL(window.location.href);
-                newUrl.searchParams.set('room', roomName);
-                window.history.replaceState({}, '', newUrl);
-            }
-            
-            let provider = null;
-            function initCollaboration() {
-                provider = new YWebRTC(roomName, ydoc, { signaling: ['wss://signaling.yjs.dev'] });
-                provider.on('peers', (peers) => {
-                    const count = peers.size;
-                    document.getElementById('peerCount').innerText = count;
-                    const statusSpan = document.getElementById('roomStatus');
-                    if (count > 0) statusSpan.innerHTML = `🟢 ${count} peer(s)`;
-                    else statusSpan.innerHTML = '🟢 Alone (share to invite)';
-                });
-                provider.on('status', (status) => {
-                    const statusSpan = document.getElementById('roomStatus');
-                    if (status.connected) {
-                        if (!statusSpan.innerHTML.startsWith('🟢')) statusSpan.innerHTML = '🟢 Connected';
-                    } else {
-                        statusSpan.innerHTML = '🔴 Offline (reconnecting...)';
-                    }
-                });
-            }
-            initCollaboration();
+        // ---------- 2. Helper: update word/character count ----------
+        function updateStats() {
+            const text = quill.getText();
+            const chars = text.length;
+            const words = text.trim().split(/\s+/).filter(w => w.length).length;
+            document.getElementById('wordCount').innerText = words;
+            document.getElementById('charCount').innerText = chars;
+        }
 
-            // ---------- 3. Local backup & stats ----------
-            const STORAGE_KEY = 'kuripedu_collab_backup';
-            function saveBackup() {
-                const content = quill.root.innerHTML;
-                localStorage.setItem(STORAGE_KEY, content);
-                updateStats();
-                const statusSpan = document.querySelector('.status-bar span:first-child');
-                if (statusSpan) {
-                    const original = statusSpan.innerHTML;
-                    statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
-                    setTimeout(() => { if(statusSpan) statusSpan.innerHTML = original; }, 1000);
-                }
+        // ---------- 3. Auto-save to localStorage ----------
+        const STORAGE_KEY = 'kuripedu_notepad_data';
+        function saveToLocal() {
+            const content = quill.root.innerHTML;
+            localStorage.setItem(STORAGE_KEY, content);
+            updateStats();
+            // Visual feedback on save status
+            const statusSpan = document.querySelector('.status-bar span:first-child');
+            if (statusSpan) {
+                const originalHtml = statusSpan.innerHTML;
+                statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved!';
+                setTimeout(() => {
+                    if (statusSpan) statusSpan.innerHTML = originalHtml;
+                }, 1200);
             }
-            function loadBackup() {
-                const saved = localStorage.getItem(STORAGE_KEY);
-                if (saved && saved !== '<p><br></p>') {
-                    quill.root.innerHTML = saved;
-                } else {
-                    quill.setText('✨ Collaborative Notepad ✨\n\n• Invite others using the link or QR code.\n• All changes appear in real time.\n• Click "Deep Work" for distraction-free fullscreen.\n• Export your note as HTML.\n\nHappy co-writing!');
-                }
-                updateStats();
+        }
+        function loadFromLocal() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved && saved !== '<p><br></p>') {
+                quill.root.innerHTML = saved;
+            } else {
+                quill.setText('✨ Welcome to Kuripedu ✨\n\n• Write anything – notes, lists, ideas.\n• Click "Deep Work" for fullscreen focus (hides all UI).\n• Change theme, font size, and line height.\n• Export your note as HTML.\n• Everything auto-saves in your browser.\n\nHappy writing!');
             }
-            function updateStats() {
-                const text = quill.getText();
-                const chars = text.length;
-                const words = text.trim().split(/\s+/).filter(w => w.length).length;
-                document.getElementById('wordCount').innerText = words;
-                document.getElementById('charCount').innerText = chars;
-            }
-            quill.on('text-change', saveBackup);
-            
-            // ---------- 4. Theme ----------
-            let themeIndex = 0;
-            const themes = ['light', 'dark', 'sepia'];
-            const savedTheme = localStorage.getItem('kuripedu_theme');
-            if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIndex = 1; }
-            if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex = 2; }
-            document.getElementById('themeToggleBtn').addEventListener('click', () => {
-                themeIndex = (themeIndex + 1) % 3;
-                document.body.classList.remove('dark', 'sepia');
-                if (themes[themeIndex] === 'dark') document.body.classList.add('dark');
-                if (themes[themeIndex] === 'sepia') document.body.classList.add('sepia');
-                localStorage.setItem('kuripedu_theme', themes[themeIndex]);
-            });
+            updateStats();
+        }
+        quill.on('text-change', () => {
+            saveToLocal();
+        });
 
-            // ---------- 5. Font & line height ----------
-            const fontSelect = document.getElementById('fontSelect');
-            const lineSelect = document.getElementById('lineHeightSelect');
-            function applyEditorStyle() {
-                const editor = document.querySelector('.ql-editor');
-                if (editor) {
-                    editor.style.fontSize = fontSelect.value;
-                    editor.style.lineHeight = lineSelect.value;
-                }
-            }
-            fontSelect.addEventListener('change', applyEditorStyle);
-            lineSelect.addEventListener('change', applyEditorStyle);
-            setTimeout(applyEditorStyle, 100);
+        // ---------- 4. Theme Toggle (light / dark / sepia) ----------
+        let themeIndex = 0;
+        const themes = ['light', 'dark', 'sepia'];
+        const savedTheme = localStorage.getItem('kuripedu_theme');
+        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIndex = 1; }
+        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex = 2; }
+        document.getElementById('themeToggleBtn').addEventListener('click', () => {
+            themeIndex = (themeIndex + 1) % 3;
+            document.body.classList.remove('dark', 'sepia');
+            if (themes[themeIndex] === 'dark') document.body.classList.add('dark');
+            if (themes[themeIndex] === 'sepia') document.body.classList.add('sepia');
+            localStorage.setItem('kuripedu_theme', themes[themeIndex]);
+        });
 
-            // ---------- 6. Export ----------
-            document.getElementById('exportBtn').addEventListener('click', () => {
-                const content = quill.root.innerHTML;
-                const fullHtml = `<!DOCTYPE html>
+        // ---------- 5. Font size & Line height controls (apply to editor) ----------
+        const fontSelect = document.getElementById('fontSelect');
+        const lineSelect = document.getElementById('lineHeightSelect');
+        function applyEditorStyle() {
+            const editorContent = document.querySelector('.ql-editor');
+            if (editorContent) {
+                editorContent.style.fontSize = fontSelect.value;
+                editorContent.style.lineHeight = lineSelect.value;
+            }
+        }
+        fontSelect.addEventListener('change', applyEditorStyle);
+        lineSelect.addEventListener('change', applyEditorStyle);
+        // initial style after DOM ready
+        setTimeout(applyEditorStyle, 100);
+
+        // ---------- 6. Export as HTML file ----------
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const content = quill.root.innerHTML;
+            const fullHtml = `<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
@@ -383,91 +287,52 @@
 ${content}
 </body>
 </html>`;
-                const blob = new Blob([fullHtml], { type: 'text/html' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `kuripedu_${Date.now()}.html`;
-                link.click();
-                URL.revokeObjectURL(link.href);
-            });
+            const blob = new Blob([fullHtml], { type: 'text/html' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `kuripedu_${Date.now()}.html`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
 
-            // ---------- 7. Deep Work ----------
-            const deepBtn = document.getElementById('deepWorkBtn');
-            let isDeep = false;
-            function toggleDeepWork() {
-                if (!isDeep) {
-                    document.body.classList.add('deep-work');
-                    const elem = document.documentElement;
-                    if (elem.requestFullscreen) elem.requestFullscreen().catch(e => console.warn(e));
-                    deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
-                    isDeep = true;
-                } else {
-                    document.body.classList.remove('deep-work');
-                    if (document.exitFullscreen) document.exitFullscreen().catch(e => console.warn(e));
-                    deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
-                    isDeep = false;
+        // ---------- 7. Deep Work Mode (fullscreen + hide UI) ----------
+        const deepBtn = document.getElementById('deepWorkBtn');
+        let isDeep = false;
+        function toggleDeepWork() {
+            if (!isDeep) {
+                // Enter deep work mode
+                document.body.classList.add('deep-work');
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => console.warn('Fullscreen error:', err));
                 }
+                deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
+                isDeep = true;
+            } else {
+                // Exit deep work mode
+                document.body.classList.remove('deep-work');
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => console.warn('Exit fullscreen error:', err));
+                }
+                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                isDeep = false;
             }
-            deepBtn.addEventListener('click', toggleDeepWork);
-            document.addEventListener('fullscreenchange', () => {
-                if (!document.fullscreenElement && isDeep) {
-                    document.body.classList.remove('deep-work');
-                    deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
-                    isDeep = false;
-                }
-            });
-
-            // ---------- 8. Share Link & QR ----------
-            const shareLinkBtn = document.getElementById('shareLinkBtn');
-            const showQrBtn = document.getElementById('showQrBtn');
-            const qrContainer = document.getElementById('qrContainer');
-            const qrDiv = document.getElementById('qrcode');
-            
-            function getCurrentRoomUrl() {
-                let url = new URL(window.location.href);
-                url.searchParams.set('room', roomName);
-                return url.toString();
-            }
-            
-            shareLinkBtn.addEventListener('click', async () => {
-                const url = getCurrentRoomUrl();
-                try {
-                    await navigator.clipboard.writeText(url);
-                    alert('Invite link copied to clipboard!\nShare it with anyone to collaborate.');
-                } catch (err) {
-                    alert('Could not copy link. You can manually copy: ' + url);
-                }
-            });
-            
-            let qrGenerated = false;
-            showQrBtn.addEventListener('click', () => {
-                if (qrContainer.style.display === 'none' || qrContainer.style.display === '') {
-                    qrContainer.style.display = 'block';
-                    if (!qrGenerated) {
-                        const url = getCurrentRoomUrl();
-                        qrDiv.innerHTML = '';
-                        new QRCode(qrDiv, {
-                            text: url,
-                            width: 120,
-                            height: 120
-                        });
-                        qrGenerated = true;
-                    }
-                    showQrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
-                } else {
-                    qrContainer.style.display = 'none';
-                    showQrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
-                }
-            });
-            qrContainer.style.display = 'none';
-            
-            // ---------- 9. Load backup ----------
-            loadBackup();
-            setInterval(saveBackup, 30000);
         }
-        
-        // Start the app after a short delay to let scripts load
-        setTimeout(initApp, 100);
+        deepBtn.addEventListener('click', toggleDeepWork);
+        // Listen for fullscreen change (if user presses ESC)
+        document.addEventListener('fullscreenchange', () => {
+            if (!document.fullscreenElement && isDeep) {
+                document.body.classList.remove('deep-work');
+                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                isDeep = false;
+            }
+        });
+
+        // ---------- 8. Load saved data on start ----------
+        loadFromLocal();
+
+        // Optional periodic backup (every 30 seconds)
+        setInterval(saveToLocal, 30000);
     })();
 </script>
 </body>
