@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Firebase Collaboration</title>
+    <title>Kuripedu · Firebase Collaboration (Fixed)</title>
     <!-- Quill Editor CSS -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <!-- Font Awesome -->
@@ -55,44 +55,33 @@
     </div>
 </div>
 
-<script type="importmap">
-    {
-        "imports": {
-            "yjs": "https://esm.run/yjs@13.6.15",
-            "y-fire": "https://esm.run/y-fire@1.0.1",
-            "quill": "https://esm.sh/quill@2.0.2",
-            "y-quill": "https://esm.sh/y-quill@0.2.0",
-            "qrcode": "https://esm.sh/qrcode",
-            "firebase/app": "https://esm.sh/firebase@11.0.0/app",
-            "firebase/firestore": "https://esm.sh/firebase@11.0.0/firestore"
-        }
-    }
-</script>
+<!-- Load Firebase SDK first (global) -->
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 
-<script type="module">
-    import * as Y from 'yjs';
-    import { FireProvider } from 'y-fire';
-    import Quill from 'quill';
-    import QuillBinding from 'y-quill';
-    import { initializeApp } from 'firebase/app';
-    import { getFirestore } from 'firebase/firestore';
-    
-    // ==================== REPLACE WITH YOUR FIREBASE CONFIG ====================
+<!-- Load Yjs and providers from CDN (global) -->
+<script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
+<script src="https://unpkg.com/y-quill@0.2.0/dist/y-quill.js"></script>
+<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+
+<script>
+    // Your Firebase config
     const firebaseConfig = {
-  apiKey: "AIzaSyBR_HZdIaIFWxCPR0gKwaAswsbKofPHzMQ",
-  authDomain: "kuripedu-533ce.firebaseapp.com",
-  projectId: "kuripedu-533ce",
-  storageBucket: "kuripedu-533ce.firebasestorage.app",
-  messagingSenderId: "758703500345",
-  appId: "1:758703500345:web:4ed50a1f0c260efa4ab1e8"
+        apiKey: "AIzaSyBR_HZdIaIFWxCPR0gKwaAswsbKofPHzMQ",
+        authDomain: "kuripedu-533ce.firebaseapp.com",
+        projectId: "kuripedu-533ce",
+        storageBucket: "kuripedu-533ce.firebasestorage.app",
+        messagingSenderId: "758703500345",
+        appId: "1:758703500345:web:4ed50a1f0c260efa4ab1e8"
     };
-    // ============================================================================
-    
-    // --- Initialize Firebase ---
-    const firebaseApp = initializeApp(firebaseConfig);
-    const db = getFirestore(firebaseApp);
-    
-    // --- Generate or Get Room ID from URL ---
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Room ID from URL
     const urlParams = new URLSearchParams(window.location.search);
     let roomName = urlParams.get('room');
     if (!roomName) {
@@ -102,36 +91,58 @@
         window.history.replaceState({}, '', newUrl);
     }
 
-    // --- Setup Collaboration with y-fire ---
+    // Setup Yjs document and Quill
     const ydoc = new Y.Doc();
-    const fireProvider = new FireProvider({
-        firebaseApp: firebaseApp,
-        ydoc: ydoc,
-        path: `notes/${roomName}`
-    });
-    
-    // --- Initialize Quill Editor ---
     const quill = new Quill('#editorContainer', {
         theme: 'snow',
         modules: { toolbar: [['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['link', 'clean']] }
     });
+    const binding = new QuillBinding(quill, ydoc.getText('quill'));
+
+    // Use Firestore as persistence layer (simple approach)
+    // We'll store the Yjs document updates in Firestore
+    const docRef = db.collection('notes').doc(roomName);
     
-    // --- Bind Quill with Yjs ---
-    const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
-    
-    // --- Update UI on Connection Status ---
-    fireProvider.on('status', (status) => {
-        const modeSpan = document.getElementById('modeStatus');
-        if (status.connected) {
-            modeSpan.innerHTML = '🟢 Live Collab (Firebase)';
-            modeSpan.style.background = '#10b981';
-        } else {
-            modeSpan.innerHTML = '🟡 Connecting...';
-            modeSpan.style.background = '#eab308';
+    // Load initial content from Firestore
+    docRef.get().then(doc => {
+        if (doc.exists && doc.data().content) {
+            // Apply updates from Firestore
+            const updates = doc.data().updates || [];
+            updates.forEach(update => {
+                Y.applyUpdate(ydoc, new Uint8Array(update));
+            });
         }
     });
-    
-    // --- Auto-save to localStorage (Backup) & Stats ---
+
+    // Listen for real-time changes from Firestore
+    docRef.onSnapshot(snapshot => {
+        if (snapshot.exists && snapshot.data().updates) {
+            const updates = snapshot.data().updates;
+            updates.forEach(update => {
+                Y.applyUpdate(ydoc, new Uint8Array(update));
+            });
+        }
+    });
+
+    // When local changes happen, store them in Firestore
+    ydoc.on('update', async (update) => {
+        const updateArray = Array.from(update);
+        const docSnap = await docRef.get();
+        let existingUpdates = [];
+        if (docSnap.exists && docSnap.data().updates) {
+            existingUpdates = docSnap.data().updates;
+        }
+        existingUpdates.push(updateArray);
+        // Keep only last 50 updates to avoid huge documents (optional)
+        if (existingUpdates.length > 50) existingUpdates = existingUpdates.slice(-50);
+        await docRef.set({ updates: existingUpdates, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    });
+
+    // Status indicator
+    document.getElementById('modeStatus').innerHTML = '🟢 Live Collab (Firestore)';
+    document.getElementById('modeStatus').style.background = '#10b981';
+
+    // Auto-save to localStorage (backup) & stats
     const STORAGE_KEY = 'kuripedu_firebase_backup';
     function updateStats() {
         const text = quill.getText();
@@ -151,7 +162,6 @@
     }
     quill.on('text-change', saveBackup);
     
-    // --- Load initial content ---
     function loadFromLocal() {
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved && saved !== '<p><br></p>') {
@@ -164,7 +174,7 @@
     loadFromLocal();
     setInterval(saveBackup, 10000);
     
-    // --- UI Controls (Theme, Font, etc.) ---
+    // Theme, font, deep work, export, share link, QR (same as before)
     document.getElementById('themeBtn').addEventListener('click', () => {
         const themes = ['light', 'dark', 'sepia'];
         let idx = localStorage.getItem('themeIdx') ? parseInt(localStorage.getItem('themeIdx')) : 0;
@@ -201,12 +211,11 @@
     });
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isDeep) { document.body.classList.remove('deep-work'); isDeep = false; } });
     
-    // --- Share Link & QR Code Generation ---
+    // Share link & QR code
     const shareBtn = document.getElementById('shareLinkBtn');
     const qrBtn = document.getElementById('showQrBtn');
     const qrContainer = document.getElementById('qrContainer');
     const qrDiv = document.getElementById('qrcode');
-    const QRCode = (await import('qrcode')).default;
     
     function getRoomUrl() {
         let url = new URL(window.location.href);
@@ -224,8 +233,9 @@
             qrContainer.style.display = 'block';
             qrDiv.innerHTML = '';
             const url = getRoomUrl();
-            const canvas = await QRCode.toCanvas(url, { width: 120, margin: 1 });
-            qrDiv.appendChild(canvas);
+            QRCode.toCanvas(qrDiv, url, { width: 120, margin: 1 }, function (error) {
+                if (error) console.error(error);
+            });
             qrShown = true;
             qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
         } else {
