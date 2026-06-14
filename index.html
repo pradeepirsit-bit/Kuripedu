@@ -3,17 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Kuripedu · Deep Work Mode</title>
-    <!-- PWA manifest (fixed syntax) -->
-    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Kuripedu%22,%22short_name%22:%22Kuripedu%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230f172a%22,%22theme_color%22:%22%233b82f6%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%20100%20100'%3E%3Crect%20width='100'%20height='100'%20fill='%233b82f6'/%3E%3Ctext%20x='50'%20y='67'%20font-size='50'%20text-anchor='middle'%20fill='white'%3EK%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
-    <!-- Yjs + Y-WebRTC + y-quill (loaded in correct order) -->
+    <title>Kuripedu · Deep Work Notepad</title>
+    <!-- PWA manifest (correct JSON syntax as data URL) -->
+    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Kuripedu%22,%22short_name%22:%22Kuripedu%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230f172a%22,%22theme_color%22:%22%233b82f6%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233b82f6'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='white'%3EK%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
+    <!-- Load external libraries with fallback -->
     <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
-    <!-- Quill -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    <!-- QR Code -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
@@ -54,7 +52,7 @@
             transition: background 0.2s, color 0.2s;
             padding: 1rem;
         }
-        /* DEEP WORK MODE: hide everything except the editor */
+        /* Deep Work Mode: hide everything except editor */
         body.deep-work .notepad-header,
         body.deep-work .sync-panel,
         body.deep-work .status-bar,
@@ -64,28 +62,12 @@
         body.deep-work .ql-toolbar {
             display: none !important;
         }
-        body.deep-work .editor-wrapper {
-            padding: 0 !important;
-        }
-        body.deep-work #quillEditor {
-            min-height: 100vh !important;
-        }
-        body.deep-work .ql-container {
-            border: none !important;
-            font-size: 1.2rem;
-        }
-        body.deep-work .app-container {
-            max-width: 100% !important;
-            margin: 0 !important;
-        }
-        body.deep-work .notepad-card {
-            border-radius: 0 !important;
-            border: none !important;
-            box-shadow: none !important;
-        }
-        body.deep-work .simple-table-wrapper .table-inline-toolbar {
-            display: none !important;
-        }
+        body.deep-work .editor-wrapper { padding: 0 !important; }
+        body.deep-work #quillEditor { min-height: 100vh !important; }
+        body.deep-work .ql-container { border: none !important; font-size: 1.2rem; }
+        body.deep-work .app-container { max-width: 100% !important; margin: 0 !important; }
+        body.deep-work .notepad-card { border-radius: 0 !important; border: none !important; box-shadow: none !important; }
+        body.deep-work .simple-table-wrapper .table-inline-toolbar { display: none !important; }
         /* normal styles */
         .app-container { max-width: 1400px; margin: 0 auto; }
         .notepad-card {
@@ -155,14 +137,8 @@
             vertical-align: top;
             min-width: 80px;
         }
-        .simple-table th {
-            background: var(--table-header);
-            font-weight: 600;
-        }
-        .simple-table [contenteditable="true"] {
-            outline: none;
-            cursor: text;
-        }
+        .simple-table th { background: var(--table-header); font-weight: 600; }
+        .simple-table [contenteditable="true"] { outline: none; cursor: text; }
         .table-inline-toolbar {
             display: flex;
             gap: 0.4rem;
@@ -185,12 +161,7 @@
             margin: 0.5rem 1.8rem 1rem;
             border: 1px solid var(--border);
         }
-        .qr-container {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
+        .qr-container { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
         #qrcode { background: white; padding: 0.5rem; border-radius: 0.75rem; }
         .badge {
             background: var(--accent);
@@ -217,10 +188,7 @@
             border: 1px solid var(--border);
             box-shadow: 0 20px 30px -10px rgba(0,0,0,0.2);
         }
-        .modal-card input, .modal-card label {
-            margin: 0.5rem 0;
-            display: block;
-        }
+        .modal-card input, .modal-card label { margin: 0.5rem 0; display: block; }
         .modal-card input[type="number"] {
             width: 100%;
             padding: 0.5rem;
@@ -235,19 +203,9 @@
             gap: 0.5rem;
             margin: 0.8rem 0;
         }
-        .checkbox-row input {
-            width: auto;
-            margin: 0;
-        }
-        .modal-actions {
-            display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
-            margin-top: 1rem;
-        }
-        @media (max-width: 700px) {
-            .notepad-header { flex-direction: column; align-items: stretch; }
-        }
+        .checkbox-row input { width: auto; margin: 0; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+        @media (max-width: 700px) { .notepad-header { flex-direction: column; align-items: stretch; } }
     </style>
 </head>
 <body>
@@ -302,14 +260,23 @@
 
 <script>
     (function() {
-        // Wait for all libraries (Y is global now)
-        if (typeof Y === 'undefined') {
-            console.error("Yjs not loaded yet. Retrying...");
-            setTimeout(arguments.callee, 100);
+        // Ensure all required globals exist
+        function checkDependencies() {
+            if (typeof Y === 'undefined') return false;
+            if (typeof YWebRTC === 'undefined') return false;
+            if (typeof Quill === 'undefined') return false;
+            if (typeof QuillBinding === 'undefined') return false;
+            if (typeof QRCode === 'undefined') return false;
+            return true;
+        }
+
+        if (!checkDependencies()) {
+            console.warn("Waiting for dependencies...");
+            setTimeout(() => { location.reload(); }, 500);
             return;
         }
-        
-        // ---------- 1. Quill init ----------
+
+        // ---------- 1. Initialize Quill ----------
         const quill = new Quill('#quillEditor', {
             theme: 'snow',
             placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is smooth.',
@@ -326,13 +293,13 @@
 
         // Drag & drop images
         const editorDiv = document.querySelector('#quillEditor');
-        editorDiv.addEventListener('dragover', (e) => e.preventDefault());
-        editorDiv.addEventListener('drop', (e) => {
+        editorDiv.addEventListener('dragover', e => e.preventDefault());
+        editorDiv.addEventListener('drop', e => {
             e.preventDefault();
             const files = e.dataTransfer.files;
             if (files && files[0] && files[0].type.startsWith('image/')) {
                 const reader = new FileReader();
-                reader.onload = (ev) => {
+                reader.onload = ev => {
                     const range = quill.getSelection(true);
                     quill.insertEmbed(range.index, 'image', ev.target.result);
                 };
@@ -340,7 +307,7 @@
             }
         });
 
-        // ---------- 2. Custom table blot (smooth editing, no re-render on input) ----------
+        // ---------- 2. Custom Table Blot (smooth editing, blur sync) ----------
         const BlockEmbed = Quill.import('blots/block/embed');
         class SmoothTableBlot extends BlockEmbed {
             static create(data) {
@@ -359,15 +326,15 @@
                 let html = `<table class="simple-table" contenteditable="false">`;
                 if (hasHeader && headers.length === cols) {
                     html += `<thead><tr>`;
-                    for (let c=0; c<cols; c++) {
+                    for (let c = 0; c < cols; c++) {
                         html += `<th contenteditable="true" data-col="${c}">${escapeHtml(String(headers[c]))}</th>`;
                     }
                     html += `</thead>`;
                 }
                 html += `<tbody>`;
-                for (let i=0; i<rows; i++) {
+                for (let i = 0; i < rows; i++) {
                     html += `<tr>`;
-                    for (let j=0; j<cols; j++) {
+                    for (let j = 0; j < cols; j++) {
                         const cellValue = (values[i] && values[i][j] !== undefined) ? values[i][j] : '';
                         html += `<td contenteditable="true" data-row="${i}" data-col="${j}">${escapeHtml(String(cellValue))}</td>`;
                     }
@@ -389,10 +356,10 @@
                         table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
                     }
                     const currentValues = [];
-                    for (let i=0; i<currentRows; i++) {
+                    for (let i = 0; i < currentRows; i++) {
                         const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
                         const rowVals = [];
-                        for (let j=0; j<currentCols; j++) {
+                        for (let j = 0; j < currentCols; j++) {
                             rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
                         }
                         currentValues.push(rowVals);
@@ -430,7 +397,7 @@
                         let curr = getCurrentData();
                         curr.cols++;
                         if (curr.hasHeader) curr.headers.push(`Header ${curr.cols}`);
-                        for (let i=0; i<curr.rows; i++) curr.values[i].push('');
+                        for (let i = 0; i < curr.rows; i++) curr.values[i].push('');
                         SmoothTableBlot.renderTable(container, curr);
                         SmoothTableBlot.notifyUpdate(container, curr);
                     };
@@ -455,10 +422,10 @@
                 let currentHeaders = [];
                 if (hasHeaderNow) table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
                 const currentValues = [];
-                for (let i=0; i<currentRows; i++) {
+                for (let i = 0; i < currentRows; i++) {
                     const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
                     const rowVals = [];
-                    for (let j=0; j<currentCols; j++) rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
+                    for (let j = 0; j < currentCols; j++) rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
                     currentValues.push(rowVals);
                 }
                 return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
@@ -470,7 +437,7 @@
         Quill.register(SmoothTableBlot);
         function escapeHtml(str) { return str.replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m])); }
 
-        // ---------- 3. Table insertion modal ----------
+        // ---------- 3. Insert Table Modal ----------
         document.getElementById('insertTableBtn').addEventListener('click', () => {
             const modal = document.createElement('div');
             modal.className = 'modal-overlay';
@@ -505,32 +472,18 @@
                 const headers = hasHeader ? Array(cols).fill().map((_,i)=>`Header ${i+1}`) : [];
                 const values = Array(rows).fill().map(()=>Array(cols).fill(''));
                 const range = quill.getSelection(true);
-                if (range) {
-                    quill.insertEmbed(range.index, 'smoothTable', { rows, cols, hasHeader, headers, values });
-                } else {
-                    quill.insertEmbed(quill.getLength()-1, 'smoothTable', { rows, cols, hasHeader, headers, values });
-                }
+                if (range) quill.insertEmbed(range.index, 'smoothTable', { rows, cols, hasHeader, headers, values });
+                else quill.insertEmbed(quill.getLength()-1, 'smoothTable', { rows, cols, hasHeader, headers, values });
                 modal.remove();
             };
         });
 
-        // ---------- 4. Collaboration & storage ----------
+        // ---------- 4. Collaboration & Local Storage ----------
         const ydoc = new Y.Doc();
-        // Wait for QuillBinding to be defined
-        if (typeof QuillBinding === 'undefined') {
-            console.error("QuillBinding not loaded, retrying...");
-            setTimeout(() => { location.reload(); }, 500);
-            return;
-        }
         const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
         let provider = null;
         const roomName = 'kuripedu-' + (new URLSearchParams(location.search).get('room') || 'main');
         function initCollab() {
-            if (typeof YWebRTC === 'undefined') {
-                console.warn("YWebRTC not loaded yet, retrying in 1s");
-                setTimeout(initCollab, 1000);
-                return;
-            }
             provider = new YWebRTC(roomName, ydoc, { signaling: ['wss://signaling.yjs.dev'] });
             provider.on('peers', (peers) => {
                 const pc = document.getElementById('peerCount');
@@ -560,29 +513,27 @@
         function loadFromLocal() {
             const saved = localStorage.getItem('kuripedu_data');
             if (saved && saved !== '<p><br></p>') quill.root.innerHTML = saved;
-            else quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code.\n🧠 Click "Deep Work" for fullscreen focus.');
+            else {
+                quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code.\n🧠 Click "Deep Work" for fullscreen focus.');
+            }
             updateStats();
         }
 
-        // ---------- 5. UI Controls ----------
-        // Theme
+        // ---------- 5. Theme Toggle ----------
         let themeIdx = 0;
         const themes = ['light', 'dark', 'sepia'];
         const savedTheme = localStorage.getItem('themePref');
-        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx=1; }
-        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx=2; }
-        const themeBtn = document.getElementById('themeToggleBtn');
-        if (themeBtn) {
-            themeBtn.addEventListener('click', () => {
-                themeIdx = (themeIdx+1)%3;
-                document.body.classList.remove('dark', 'sepia');
-                if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
-                if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
-                localStorage.setItem('themePref', themes[themeIdx]);
-            });
-        }
+        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx = 1; }
+        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx = 2; }
+        document.getElementById('themeToggleBtn').addEventListener('click', () => {
+            themeIdx = (themeIdx+1)%3;
+            document.body.classList.remove('dark', 'sepia');
+            if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
+            if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
+            localStorage.setItem('themePref', themes[themeIdx]);
+        });
 
-        // Font & line height
+        // ---------- 6. Font & Line Height ----------
         const fontSelect = document.getElementById('fontSelect');
         const lineSelect = document.getElementById('lineHeightSelect');
         function applyEditorStyle() {
@@ -592,25 +543,22 @@
                 editorRoot.style.lineHeight = lineSelect.value;
             }
         }
-        if (fontSelect) fontSelect.addEventListener('change', applyEditorStyle);
-        if (lineSelect) lineSelect.addEventListener('change', applyEditorStyle);
+        fontSelect.addEventListener('change', applyEditorStyle);
+        lineSelect.addEventListener('change', applyEditorStyle);
         applyEditorStyle();
 
-        // Export
-        const exportBtn = document.getElementById('exportHtmlBtn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => {
-                const content = quill.root.innerHTML;
-                const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table,th,td{border:1px solid #ccc;border-collapse:collapse;padding:6px;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], {type: 'text/html'});
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = `kuripedu_${Date.now()}.html`;
-                link.click();
-                URL.revokeObjectURL(link.href);
-            });
-        }
+        // ---------- 7. Export HTML ----------
+        document.getElementById('exportHtmlBtn').addEventListener('click', () => {
+            const content = quill.root.innerHTML;
+            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table,th,td{border:1px solid #ccc;border-collapse:collapse;padding:6px;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], {type: 'text/html'});
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `kuripedu_${Date.now()}.html`;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        });
 
-        // Share link & QR
+        // ---------- 8. Share Link & QR ----------
         const shareBtn = document.getElementById('shareRoomBtn');
         const qrBtn = document.getElementById('showQrBtn');
         const qrArea = document.getElementById('qrSyncArea');
@@ -619,57 +567,45 @@
             url.searchParams.set('room', roomName);
             return url.toString();
         }
-        if (shareBtn) {
-            shareBtn.addEventListener('click', () => {
-                navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Collaboration link copied!')).catch(() => alert('Could not copy'));
-            });
-        }
-        if (qrBtn) {
-            qrBtn.addEventListener('click', () => {
-                if (qrArea) {
-                    qrArea.style.display = qrArea.style.display === 'none' ? 'flex' : 'none';
-                    if (qrArea.style.display === 'flex') {
-                        const qrDiv = document.getElementById('qrcode');
-                        if (qrDiv) {
-                            qrDiv.innerHTML = '';
-                            new QRCode(qrDiv, { text: getRoomUrl(), width: 120, height: 120 });
-                        }
-                    }
-                }
-            });
-        }
+        shareBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Collaboration link copied!')).catch(() => alert('Could not copy'));
+        });
+        qrBtn.addEventListener('click', () => {
+            qrArea.style.display = qrArea.style.display === 'none' ? 'flex' : 'none';
+            if (qrArea.style.display === 'flex') {
+                const qrDiv = document.getElementById('qrcode');
+                qrDiv.innerHTML = '';
+                new QRCode(qrDiv, { text: getRoomUrl(), width: 120, height: 120 });
+            }
+        });
 
-        // ---------- 6. Deep Work Mode ----------
+        // ---------- 9. Deep Work Mode (Fullscreen + Hide UI) ----------
         const deepBtn = document.getElementById('deepWorkBtn');
         let isDeep = false;
         function toggleDeepWork() {
             if (!isDeep) {
                 document.body.classList.add('deep-work');
                 const elem = document.documentElement;
-                if (elem.requestFullscreen) {
-                    elem.requestFullscreen().catch(err => console.warn('Fullscreen error:', err));
-                }
-                if (deepBtn) deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
+                if (elem.requestFullscreen) elem.requestFullscreen().catch(e => console.warn(e));
+                deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
                 isDeep = true;
             } else {
                 document.body.classList.remove('deep-work');
-                if (document.exitFullscreen) {
-                    document.exitFullscreen().catch(err => console.warn('Exit fullscreen error:', err));
-                }
-                if (deepBtn) deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                if (document.exitFullscreen) document.exitFullscreen().catch(e => console.warn(e));
+                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
             }
         }
-        if (deepBtn) deepBtn.addEventListener('click', toggleDeepWork);
+        deepBtn.addEventListener('click', toggleDeepWork);
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isDeep) {
                 document.body.classList.remove('deep-work');
-                if (deepBtn) deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
             }
         });
 
-        // ---------- 7. Start everything ----------
+        // ---------- 10. Start Everything ----------
         window.addEventListener('load', () => {
             loadFromLocal();
             initCollab();
