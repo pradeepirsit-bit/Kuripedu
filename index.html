@@ -3,338 +3,247 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Reliable Notepad</title>
+    <title>Kuripedu</title>
+    <!-- Quill Editor (only external CSS/JS) -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <!-- Firebase (Google's CDN, usually not blocked) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <!-- Font Awesome (optional) -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root { --bg-body: #f8fafc; --bg-panel: #ffffff; --text-main: #0f172a; --border: #e2e8f0; --accent: #3b82f6; }
         body.dark { --bg-body: #0f172a; --bg-panel: #1e293b; --text-main: #f1f5f9; --border: #334155; }
         body.sepia { --bg-body: #fbf7e9; --bg-panel: #fef9e6; --text-main: #4a3b2c; --border: #e2d5b6; }
-        body { background: var(--bg-body); color: var(--text-main); font-family: system-ui; padding: 1rem; transition: background 0.2s; }
+        body { background: var(--bg-body); color: var(--text-main); font-family: system-ui; padding: 1rem; transition: 0.2s; }
         .app-container { max-width: 1200px; margin: 0 auto; }
-        .notepad-card { background: var(--bg-panel); border-radius: 1.5rem; border: 1px solid var(--border); overflow: hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.05); }
+        .notepad-card { background: var(--bg-panel); border-radius: 1.5rem; border: 1px solid var(--border); overflow: hidden; }
         .notepad-header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 1rem; }
         h1 { font-size: 1.5rem; background: linear-gradient(135deg, var(--accent), #8b5cf6); background-clip: text; -webkit-background-clip: text; color: transparent; }
         .toolbar-group { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
         button, select { background: var(--bg-panel); border: 1px solid var(--border); padding: 0.4rem 0.9rem; border-radius: 2rem; cursor: pointer; font-size: 0.85rem; display: inline-flex; gap: 0.4rem; align-items: center; font-family: inherit; color: var(--text-main); }
         button:hover { background: var(--accent); color: white; border-color: var(--accent); }
-        .ql-container { font-size: 0.95rem; }
         .ql-editor { min-height: 450px; }
         .sync-panel { background: var(--bg-panel); border-top: 1px solid var(--border); padding: 0.6rem 1.5rem; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.8rem; font-size: 0.8rem; }
         .status-badge { background: var(--accent); color: white; border-radius: 1rem; padding: 0.2rem 0.7rem; font-size: 0.7rem; }
-        .qr-area { display: none; margin-top: 0.5rem; padding: 0.5rem; background: white; border-radius: 0.8rem; width: fit-content; text-align: center; }
         .status-bar { padding: 0.6rem 1.5rem; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 0.75rem; }
         body.deep-work .notepad-header, body.deep-work .sync-panel, body.deep-work .status-bar, body.deep-work .ql-toolbar { display: none !important; }
         body.deep-work .ql-editor { min-height: 100vh !important; }
         body.deep-work .app-container, body.deep-work .notepad-card { max-width: 100% !important; margin: 0 !important; border-radius: 0 !important; border: none !important; }
-        .error-banner { background: #fee2e2; color: #991b1b; padding: 0.8rem; margin: 1rem; border-radius: 1rem; text-align: center; }
     </style>
 </head>
 <body>
 <div class="app-container">
     <div class="notepad-card">
         <div class="notepad-header">
-            <h1><i class="fas fa-fire"></i> Kuripedu · Reliable Pad</h1>
+            <h1><i class="fas fa-fire"></i> Kuripedu · Firestore Collab</h1>
             <div class="toolbar-group">
                 <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
                 <button id="themeBtn"><i class="fas fa-palette"></i> Theme</button>
-                <select id="fontSelect" name="fontSelect" aria-label="Font size">
+                <select id="fontSelect" name="fontSelect">
                     <option value="1rem">Normal</option>
                     <option value="1.2rem">Large</option>
                 </select>
-                <select id="lineHeightSelect" name="lineHeightSelect" aria-label="Line height">
+                <select id="lineHeightSelect" name="lineHeightSelect">
                     <option value="1.6">1.6</option>
                     <option value="1.8">1.8</option>
                 </select>
                 <button id="exportBtn"><i class="fas fa-download"></i> Export</button>
             </div>
         </div>
-        <div id="editorContainer" role="textbox" aria-multiline="true" aria-label="Notepad editor"></div>
+        <div id="editorContainer"></div>
         <div class="sync-panel">
-            <div><span><i class="fas fa-globe"></i> Mode: </span><span id="modeStatus" class="status-badge">🟡 Loading...</span></div>
-            <div><button id="shareLinkBtn" disabled><i class="fas fa-link"></i> Copy Link</button><button id="showQrBtn" disabled><i class="fas fa-qrcode"></i> QR</button></div>
-            <div id="qrContainer" class="qr-area"><div id="qrcode"></div><small>Share this link</small></div>
+            <div><span><i class="fas fa-globe"></i> Mode: </span><span id="modeStatus" class="status-badge">🟡 Connecting to Firestore...</span></div>
+            <div><button id="shareLinkBtn"><i class="fas fa-link"></i> Copy Room Link</button></div>
         </div>
         <div class="status-bar"><span><i class="fas fa-save"></i> Auto-saved</span><span>Words: <span id="wordCount">0</span> | Chars: <span id="charCount">0</span></span></div>
     </div>
 </div>
 
 <script>
-    // Attempt to load critical libraries from multiple sources
-    let yjsLoaded = false, quillLoaded = false, yQuillLoaded = false, qrcodeLoaded = false;
-    let allLoaded = false;
-    
-    function loadScript(url, callback) {
-        const script = document.createElement('script');
-        script.src = url;
-        script.onload = () => { if (callback) callback(true); };
-        script.onerror = () => { if (callback) callback(false); };
-        document.head.appendChild(script);
+    // Firebase config (yours)
+    const firebaseConfig = {
+        apiKey: "AIzaSyBR_HZdIaIFWxCPR0gKwaAswsbKofPHzMQ",
+        authDomain: "kuripedu-533ce.firebaseapp.com",
+        projectId: "kuripedu-533ce",
+        storageBucket: "kuripedu-533ce.firebasestorage.app",
+        messagingSenderId: "758703500345",
+        appId: "1:758703500345:web:4ed50a1f0c260efa4ab1e8"
+    };
+
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // Room ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    let roomName = urlParams.get('room');
+    if (!roomName) {
+        roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
+        const newUrl = new URL(window.location.href);
+        newUrl.searchParams.set('room', roomName);
+        window.history.replaceState({}, '', newUrl);
     }
-    
-    // Try different sources sequentially
-    const yjsUrls = [
-        'https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js',
-        'https://unpkg.com/yjs@13.6.15/dist/y.min.js',
-        'https://cdn.skypack.dev/yjs@13.6.15'
-    ];
-    const quillUrls = [
-        'https://cdn.quilljs.com/1.3.7/quill.min.js',
-        'https://unpkg.com/quill@1.3.7/dist/quill.min.js'
-    ];
-    const yQuillUrls = [
-        'https://unpkg.com/y-quill@0.2.0/dist/y-quill.js',
-        'https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js'
-    ];
-    const qrcodeUrls = [
-        'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js',
-        'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js'
-    ];
-    const firebaseUrls = [
-        'https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js',
-        'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js'
-    ];
-    
-    let firebaseReady = false;
-    let firestoreReady = false;
-    
-    // Load Firebase first
-    loadScript(firebaseUrls[0], (ok) => { if (ok) loadScript(firebaseUrls[1], (ok2) => { if (ok2) firebaseReady = true; else firebaseReady = false; }); else firebaseReady = false; });
-    
-    function tryLoadYjs(index) {
-        if (index >= yjsUrls.length) return;
-        loadScript(yjsUrls[index], (loaded) => {
-            if (loaded) { yjsLoaded = true; checkAllLoaded(); }
-            else tryLoadYjs(index + 1);
-        });
-    }
-    function tryLoadQuill(index) {
-        if (index >= quillUrls.length) return;
-        loadScript(quillUrls[index], (loaded) => {
-            if (loaded) { quillLoaded = true; checkAllLoaded(); }
-            else tryLoadQuill(index + 1);
-        });
-    }
-    function tryLoadYQuill(index) {
-        if (index >= yQuillUrls.length) return;
-        loadScript(yQuillUrls[index], (loaded) => {
-            if (loaded) { yQuillLoaded = true; checkAllLoaded(); }
-            else tryLoadYQuill(index + 1);
-        });
-    }
-    function tryLoadQrcode(index) {
-        if (index >= qrcodeUrls.length) return;
-        loadScript(qrcodeUrls[index], (loaded) => {
-            if (loaded) { qrcodeLoaded = true; checkAllLoaded(); }
-            else tryLoadQrcode(index + 1);
-        });
-    }
-    
-    tryLoadYjs(0);
-    tryLoadQuill(0);
-    tryLoadYQuill(0);
-    tryLoadQrcode(0);
-    
-    function checkAllLoaded() {
-        if (yjsLoaded && quillLoaded && yQuillLoaded && qrcodeLoaded && firebaseReady) {
-            allLoaded = true;
-            startCollaborativeApp();
-        } else if (yjsLoaded && quillLoaded && yQuillLoaded && qrcodeLoaded) {
-            // Firebase failed but Yjs works – we can still do a local Firestore? No, we need Firebase.
-            // Fallback to local editor
-            startLocalEditor();
+
+    // Setup Quill
+    const quill = new Quill('#editorContainer', {
+        theme: 'snow',
+        modules: {
+            toolbar: [['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['link', 'clean']]
         }
-    }
-    
-    // Timeout fallback: if after 10 seconds libraries still not loaded, use local editor
-    setTimeout(() => {
-        if (!allLoaded) {
-            startLocalEditor();
+    });
+
+    // Firestore document reference
+    const docRef = db.collection('notes').doc(roomName);
+
+    // Sync state
+    let isLocalChange = false;
+    let pendingSave = null;
+
+    // Load initial content
+    docRef.get().then(doc => {
+        if (doc.exists && doc.data().content) {
+            isLocalChange = true;
+            quill.root.innerHTML = doc.data().content;
+            isLocalChange = false;
         }
-    }, 10000);
-    
-    function startLocalEditor() {
-        if (typeof Quill === 'undefined') {
-            document.getElementById('modeStatus').innerHTML = '❌ Editor failed to load';
-            return;
-        }
-        const quill = new Quill('#editorContainer', {
-            theme: 'snow',
-            modules: { toolbar: [['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link','clean']] }
-        });
-        attachUIControls(quill);
-        const STORAGE_KEY = 'kuripedu_local';
-        function updateStats() {
-            const text = quill.getText();
-            document.getElementById('wordCount').innerText = text.trim().split(/\s+/).filter(w=>w.length).length;
-            document.getElementById('charCount').innerText = text.length;
-        }
-        function saveLocal() {
-            localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
-            updateStats();
-            const span = document.querySelector('.status-bar span:first-child');
-            if (span) { const o = span.innerHTML; span.innerHTML = '<i class="fas fa-check"></i> Saved'; setTimeout(() => span.innerHTML = o, 1000); }
-        }
-        quill.on('text-change', saveLocal);
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved && saved !== '<p><br></p>') quill.root.innerHTML = saved;
-        else quill.setText('✨ Offline Mode ✨\n\nCollaboration libraries could not load.\nYour notes are saved locally.\n\nAll other features (theme, export, deep work) work perfectly.');
         updateStats();
-        setInterval(saveLocal, 10000);
-        document.getElementById('modeStatus').innerHTML = '📝 Local Only';
-        document.getElementById('modeStatus').style.background = '#6b7280';
-    }
-    
-    function attachUIControls(quill) {
-        // Theme toggle
-        document.getElementById('themeBtn').addEventListener('click', () => {
-            const themes = ['light','dark','sepia'];
-            let idx = localStorage.getItem('themeIdx') ? parseInt(localStorage.getItem('themeIdx')) : 0;
-            idx = (idx+1)%3;
-            document.body.classList.remove('dark','sepia');
-            if (themes[idx]==='dark') document.body.classList.add('dark');
-            if (themes[idx]==='sepia') document.body.classList.add('sepia');
-            localStorage.setItem('themeIdx', idx);
-        });
-        const saved = localStorage.getItem('themeIdx');
-        if (saved === '1') document.body.classList.add('dark');
-        if (saved === '2') document.body.classList.add('sepia');
-        
-        const fontSelect = document.getElementById('fontSelect');
-        const lineSelect = document.getElementById('lineHeightSelect');
-        function applyStyle() {
-            const editor = document.querySelector('.ql-editor');
-            if (editor) { editor.style.fontSize = fontSelect.value; editor.style.lineHeight = lineSelect.value; }
-        }
-        fontSelect.addEventListener('change', applyStyle);
-        lineSelect.addEventListener('change', applyStyle);
-        applyStyle();
-        
-        document.getElementById('exportBtn').addEventListener('click', () => {
-            const content = quill.root.innerHTML;
-            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title></head><body>${content}</body></html>`], {type:'text/html'});
-            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kuripedu_${Date.now()}.html`; a.click(); URL.revokeObjectURL(a.href);
-        });
-        
-        let isDeep = false;
-        document.getElementById('deepWorkBtn').addEventListener('click', () => {
-            if (!isDeep) { document.body.classList.add('deep-work'); document.documentElement.requestFullscreen(); isDeep=true; }
-            else { document.body.classList.remove('deep-work'); document.exitFullscreen(); isDeep=false; }
-        });
-        document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isDeep) { document.body.classList.remove('deep-work'); isDeep=false; } });
-    }
-    
-    function startCollaborativeApp() {
-        // Firebase config
-        const firebaseConfig = {
-            apiKey: "AIzaSyBR_HZdIaIFWxCPR0gKwaAswsbKofPHzMQ",
-            authDomain: "kuripedu-533ce.firebaseapp.com",
-            projectId: "kuripedu-533ce",
-            storageBucket: "kuripedu-533ce.firebasestorage.app",
-            messagingSenderId: "758703500345",
-            appId: "1:758703500345:web:4ed50a1f0c260efa4ab1e8"
-        };
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.firestore();
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        let roomName = urlParams.get('room');
-        if (!roomName) {
-            roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
-            const newUrl = new URL(window.location.href);
-            newUrl.searchParams.set('room', roomName);
-            window.history.replaceState({}, '', newUrl);
-        }
-        
-        const ydoc = new Y.Doc();
-        const quill = new Quill('#editorContainer', {
-            theme: 'snow',
-            modules: { toolbar: [['bold','italic','underline'],[{list:'ordered'},{list:'bullet'}],['link','clean']] }
-        });
-        const binding = new QuillBinding(quill, ydoc.getText('quill'));
-        
-        const docRef = db.collection('notes').doc(roomName);
-        docRef.get().then(doc => {
-            if (doc.exists && doc.data().updates) {
-                doc.data().updates.forEach(up => Y.applyUpdate(ydoc, new Uint8Array(up)));
+    }).catch(err => {
+        console.warn("Error loading doc:", err);
+        document.getElementById('modeStatus').innerHTML = '⚠️ Offline mode';
+    });
+
+    // Listen for real-time changes from Firestore
+    docRef.onSnapshot(snapshot => {
+        if (snapshot.exists && snapshot.data().content && !isLocalChange) {
+            const savedContent = snapshot.data().content;
+            const currentContent = quill.root.innerHTML;
+            if (savedContent !== currentContent) {
+                isLocalChange = true;
+                quill.root.innerHTML = savedContent;
+                isLocalChange = false;
+                updateStats();
             }
-        }).catch(e => console.warn(e));
-        
-        docRef.onSnapshot(snapshot => {
-            if (snapshot.exists && snapshot.data().updates) {
-                snapshot.data().updates.forEach(up => Y.applyUpdate(ydoc, new Uint8Array(up)));
-            }
-        });
-        
-        let pending = false;
-        ydoc.on('update', async (update) => {
-            if (pending) return;
-            pending = true;
-            setTimeout(async () => {
-                try {
-                    const arr = Array.from(update);
-                    const snap = await docRef.get();
-                    let updates = snap.exists && snap.data().updates ? snap.data().updates : [];
-                    updates.push(arr);
-                    if (updates.length > 100) updates = updates.slice(-100);
-                    await docRef.set({ updates, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-                } catch(e) { console.warn(e); }
-                finally { pending = false; }
-            }, 100);
-        });
-        
-        attachUIControls(quill);
-        
-        document.getElementById('modeStatus').innerHTML = '🟢 Live Collab (Firebase)';
+        }
+        document.getElementById('modeStatus').innerHTML = '🟢 Live Collab';
         document.getElementById('modeStatus').style.background = '#10b981';
-        document.getElementById('shareLinkBtn').disabled = false;
-        document.getElementById('showQrBtn').disabled = false;
-        
-        const shareBtn = document.getElementById('shareLinkBtn');
-        const qrBtn = document.getElementById('showQrBtn');
-        const qrContainer = document.getElementById('qrContainer');
-        const qrDiv = document.getElementById('qrcode');
-        function getRoomUrl() {
-            let url = new URL(window.location.href);
-            url.searchParams.set('room', roomName);
-            return url.toString();
-        }
-        shareBtn.onclick = () => { navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied!')); };
-        let qrShown = false;
-        qrBtn.onclick = () => {
-            if (!qrShown) {
-                qrContainer.style.display = 'block';
-                qrDiv.innerHTML = '';
-                QRCode.toCanvas(qrDiv, getRoomUrl(), { width: 120, margin: 1 }, err => { if(err) console.error(err); });
-                qrShown = true;
-                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
-            } else {
-                qrContainer.style.display = 'none';
-                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
-                qrShown = false;
-            }
-        };
-        
-        const BACKUP_KEY = 'kuripedu_firebase_backup';
-        function updateStats() {
-            const text = quill.getText();
-            document.getElementById('wordCount').innerText = text.trim().split(/\s+/).filter(w=>w.length).length;
-            document.getElementById('charCount').innerText = text.length;
-        }
-        function backup() {
-            localStorage.setItem(BACKUP_KEY, quill.root.innerHTML);
-            updateStats();
-            const span = document.querySelector('.status-bar span:first-child');
-            if (span) { const o = span.innerHTML; span.innerHTML = '<i class="fas fa-check"></i> Saved'; setTimeout(() => span.innerHTML = o, 1000); }
-        }
-        quill.on('text-change', backup);
-        const saved = localStorage.getItem(BACKUP_KEY);
-        if (saved && saved !== '<p><br></p>') quill.root.innerHTML = saved;
-        else quill.setText('✨ Welcome to Kuripedu with Firebase ✨\n\n• Share this URL with a friend.\n• Everything you type will sync in real-time.\n• Click "Deep Work" for fullscreen focus.\n\nHappy co-writing!');
-        updateStats();
-        setInterval(backup, 10000);
+    }, err => {
+        console.warn("Snapshot error:", err);
+        document.getElementById('modeStatus').innerHTML = '🔴 Disconnected';
+        document.getElementById('modeStatus').style.background = '#ef4444';
+    });
+
+    // Save changes to Firestore (debounced)
+    function saveToFirestore() {
+        if (pendingSave) clearTimeout(pendingSave);
+        pendingSave = setTimeout(() => {
+            const content = quill.root.innerHTML;
+            docRef.set({ content, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+                .catch(err => console.warn("Save error:", err));
+            pendingSave = null;
+        }, 500);
     }
+
+    quill.on('text-change', () => {
+        updateStats();
+        if (!isLocalChange) {
+            saveToFirestore();
+        }
+        saveBackup();
+    });
+
+    // Local backup
+    const BACKUP_KEY = 'kuripedu_backup';
+    function saveBackup() {
+        localStorage.setItem(BACKUP_KEY, quill.root.innerHTML);
+        const statusSpan = document.querySelector('.status-bar span:first-child');
+        if (statusSpan) {
+            const orig = statusSpan.innerHTML;
+            statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
+            setTimeout(() => { statusSpan.innerHTML = orig; }, 1000);
+        }
+    }
+    function loadBackup() {
+        const saved = localStorage.getItem(BACKUP_KEY);
+        if (saved && saved !== '<p><br></p>') {
+            quill.root.innerHTML = saved;
+        } else {
+            quill.setText('✨ Welcome to Kuripedu ✨\n\n• Share this URL with a friend.\n• Everything you type will sync via Firestore.\n• Click "Deep Work" for fullscreen focus.\n\nHappy co-writing!');
+        }
+        updateStats();
+    }
+    loadBackup();
+
+    function updateStats() {
+        const text = quill.getText();
+        const words = text.trim().split(/\s+/).filter(w => w.length).length;
+        document.getElementById('wordCount').innerText = words;
+        document.getElementById('charCount').innerText = text.length;
+    }
+
+    // --- UI Controls ---
+    document.getElementById('themeBtn').addEventListener('click', () => {
+        const themes = ['light', 'dark', 'sepia'];
+        let idx = localStorage.getItem('themeIdx') ? parseInt(localStorage.getItem('themeIdx')) : 0;
+        idx = (idx + 1) % 3;
+        document.body.classList.remove('dark', 'sepia');
+        if (themes[idx] === 'dark') document.body.classList.add('dark');
+        if (themes[idx] === 'sepia') document.body.classList.add('sepia');
+        localStorage.setItem('themeIdx', idx);
+    });
+    const savedIdx = localStorage.getItem('themeIdx');
+    if (savedIdx === '1') document.body.classList.add('dark');
+    if (savedIdx === '2') document.body.classList.add('sepia');
+
+    const fontSelect = document.getElementById('fontSelect');
+    const lineSelect = document.getElementById('lineHeightSelect');
+    function applyStyle() {
+        const editor = document.querySelector('.ql-editor');
+        if (editor) {
+            editor.style.fontSize = fontSelect.value;
+            editor.style.lineHeight = lineSelect.value;
+        }
+    }
+    fontSelect.addEventListener('change', applyStyle);
+    lineSelect.addEventListener('change', applyStyle);
+    setTimeout(applyStyle, 100);
+
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        const content = quill.root.innerHTML;
+        const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title></head><body>${content}</body></html>`], { type: 'text/html' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `kuripedu_${Date.now()}.html`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+
+    let isDeep = false;
+    document.getElementById('deepWorkBtn').addEventListener('click', () => {
+        if (!isDeep) {
+            document.body.classList.add('deep-work');
+            document.documentElement.requestFullscreen();
+            isDeep = true;
+        } else {
+            document.body.classList.remove('deep-work');
+            document.exitFullscreen();
+            isDeep = false;
+        }
+    });
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && isDeep) {
+            document.body.classList.remove('deep-work');
+            isDeep = false;
+        }
+    });
+
+    document.getElementById('shareLinkBtn').addEventListener('click', () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('room', roomName);
+        navigator.clipboard.writeText(url.toString()).then(() => alert('Room link copied!'));
+    });
 </script>
 </body>
 </html>
