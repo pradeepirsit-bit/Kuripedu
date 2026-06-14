@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Kuripedu · குறிப்பேடு</title>
+    <title>Kuripedu · Deep Work Mode</title>
     <!-- PWA manifest -->
     <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Kuripedu%22,%22short_name%22:%22Kuripedu%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22#0f172a%22,%22theme_color%22:%22#3b82f6%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233b82f6'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='white'%3EK%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
     <!-- Yjs + Y-WebRTC -->
@@ -53,6 +53,46 @@
             transition: background 0.2s, color 0.2s;
             padding: 1rem;
         }
+        /* Deep Work Mode: hide all UI except editor */
+        body.deep-work .notepad-header,
+        body.deep-work .sync-panel,
+        body.deep-work .status-bar,
+        body.deep-work .collab-bar,
+        body.deep-work .editor-wrapper > div:last-child, /* table insert button wrapper */
+        body.deep-work .table-inline-toolbar {
+            display: none !important;
+        }
+        body.deep-work .editor-wrapper {
+            padding: 0 !important;
+        }
+        body.deep-work #quillEditor {
+            min-height: 100vh !important;
+        }
+        body.deep-work .ql-toolbar {
+            display: none !important;
+        }
+        body.deep-work .ql-container {
+            border: none !important;
+            font-size: 1.2rem;
+        }
+        body.deep-work .app-container {
+            max-width: 100% !important;
+            margin: 0 !important;
+        }
+        body.deep-work .notepad-card {
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+        body.deep-work .reading-view {
+            display: none !important;
+        }
+        /* keep table buttons hidden during deep work */
+        body.deep-work .simple-table-wrapper .table-inline-toolbar {
+            display: none !important;
+        }
+        
+        /* reading mode (existing) */
         body.read-mode .editor-container,
         body.read-mode .ql-toolbar,
         body.read-mode .custom-toolbar,
@@ -250,6 +290,7 @@
         <div class="notepad-header">
             <h1><i class="fas fa-pen-fancy"></i> Kuripedu <span style="font-size:0.9rem;">(குறிப்பேடு)</span></h1>
             <div class="toolbar-group">
+                <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
                 <button id="readModeBtn"><i class="fas fa-glasses"></i> Focus Read</button>
                 <button id="themeToggleBtn"><i class="fas fa-palette"></i> Theme</button>
                 <select id="fontSelect">
@@ -338,13 +379,12 @@
                 }
                 html += `</tr>`;
             }
-            html += `</tbody></table><div class="table-inline-toolbar">
+            html += `</tbody></td><div class="table-inline-toolbar">
                         <button class="add-table-row">➕ Add Row</button>
                         <button class="add-table-col">➕ Add Column</button>
                     </div>`;
             container.innerHTML = html;
             
-            // Helper: extract current data from DOM (without re-rendering)
             const getCurrentData = () => {
                 const table = container.querySelector('.simple-table');
                 if (!table) return { rows, cols, hasHeader, headers, values };
@@ -370,7 +410,6 @@
                 return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
             };
             
-            // Update data model without re-rendering (just store and notify Quill)
             const syncDataWithoutRender = () => {
                 const newData = getCurrentData();
                 const blot = Quill.find(container);
@@ -380,14 +419,12 @@
                 }
             };
             
-            // Only sync on blur (when user leaves the cell) – no re-render on input
             const editableCells = container.querySelectorAll('[contenteditable="true"]');
             editableCells.forEach(cell => {
                 cell.removeEventListener('blur', syncDataWithoutRender);
                 cell.addEventListener('blur', syncDataWithoutRender);
             });
             
-            // Add row/col buttons (these DO re-render because structure changes)
             const addRowBtn = container.querySelector('.add-table-row');
             const addColBtn = container.querySelector('.add-table-col');
             if (addRowBtn) {
@@ -465,11 +502,11 @@
     function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;});}
     
     // ------------------------------
-    // 2. Quill initialization & image drag-drop
+    // 2. Quill initialization
     // ------------------------------
     const quill = new Quill('#quillEditor', {
         theme: 'snow',
-        placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is now smooth, no pop-out.',
+        placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is smooth.',
         modules: {
             toolbar: [
                 [{ 'header': [1,2,3,false] }],
@@ -497,7 +534,7 @@
     });
     
     // ------------------------------
-    // 3. Table insertion modal (rows, cols, header toggle)
+    // 3. Table insertion modal
     // ------------------------------
     function showTableModal() {
         const modal = document.createElement('div');
@@ -546,7 +583,7 @@
     document.getElementById('insertTableBtn').addEventListener('click', showTableModal);
     
     // ------------------------------
-    // 4. CRDT Collaboration (Yjs + WebRTC)
+    // 4. Collaboration & autosave
     // ------------------------------
     const ydoc = new Y.Doc();
     const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
@@ -562,7 +599,6 @@
         });
     }
     
-    // Auto-save to localStorage
     function saveToLocal() {
         const content = quill.root.innerHTML;
         localStorage.setItem('kuripedu_data', content);
@@ -576,7 +612,7 @@
         if (saved && saved !== '<p><br></p>') {
             quill.root.innerHTML = saved;
         } else {
-            quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out, no flicker.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code for real-time collaboration.');
+            quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out, no flicker.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code for real-time collaboration.\n🧠 Click "Deep Work" to enter fullscreen focus mode.');
         }
         updateStats();
     }
@@ -588,7 +624,7 @@
     }
     
     // ------------------------------
-    // 5. Distraction-free reading mode + fonts
+    // 5. Focus Read Mode
     // ------------------------------
     const readModeBtn = document.getElementById('readModeBtn');
     const readingView = document.getElementById('readingView');
@@ -607,9 +643,14 @@
             readModeBtn.innerHTML = '<i class="fas fa-glasses"></i> Focus Read';
         }
     });
+    
+    // ------------------------------
+    // 6. Font & line height controls
+    // ------------------------------
     document.getElementById('fontSelect').addEventListener('change', (e) => {
         document.documentElement.style.setProperty('--reading-font-size', e.target.value);
         if(document.body.classList.contains('read-mode')) updateReadingView();
+        // also apply to editor? optional
     });
     document.getElementById('lineHeightSelect').addEventListener('change', (e) => {
         document.documentElement.style.setProperty('--reading-line-height', e.target.value);
@@ -617,7 +658,7 @@
     });
     
     // ------------------------------
-    // 6. Theme switcher
+    // 7. Theme switcher
     // ------------------------------
     let themeIndex = 0;
     const themes = ['light', 'dark', 'sepia'];
@@ -633,7 +674,7 @@
     if(savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex=2; }
     
     // ------------------------------
-    // 7. QR & share link
+    // 8. QR & share link
     // ------------------------------
     const shareRoomBtn = document.getElementById('shareRoomBtn');
     const showQrBtn = document.getElementById('showQrBtn');
@@ -660,7 +701,7 @@
     });
     
     // ------------------------------
-    // 8. Export
+    // 9. Export HTML
     // ------------------------------
     document.getElementById('exportHtmlBtn').addEventListener('click', () => {
         const fullDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table, th, td {border:1px solid #ccc; border-collapse:collapse; padding:6px;} [contenteditable="true"]:focus{ outline: none;}</style></head><body><h1>📝 Kuripedu · Exported Note</h1>${quill.root.innerHTML}</body></html>`;
@@ -673,7 +714,53 @@
     });
     
     // ------------------------------
-    // 9. PWA service worker
+    // 10. Deep Work Mode (Fullscreen + hide UI)
+    // ------------------------------
+    const deepWorkBtn = document.getElementById('deepWorkBtn');
+    let isDeepWork = false;
+    
+    function toggleDeepWork() {
+        if (!isDeepWork) {
+            // Enter deep work mode
+            document.body.classList.add('deep-work');
+            // Request fullscreen
+            const elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(err => {
+                    console.warn(`Fullscreen error: ${err.message}`);
+                });
+            }
+            deepWorkBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
+            isDeepWork = true;
+        } else {
+            // Exit deep work mode
+            document.body.classList.remove('deep-work');
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(err => {
+                    console.warn(`Exit fullscreen error: ${err.message}`);
+                });
+            }
+            deepWorkBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+            isDeepWork = false;
+        }
+    }
+    
+    deepWorkBtn.addEventListener('click', toggleDeepWork);
+    // Listen for fullscreen change event to sync button state if user presses ESC
+    document.addEventListener('fullscreenchange', () => {
+        if (!document.fullscreenElement && isDeepWork) {
+            // User exited fullscreen via ESC, so turn off deep work mode
+            document.body.classList.remove('deep-work');
+            deepWorkBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+            isDeepWork = false;
+        } else if (document.fullscreenElement && !isDeepWork && document.body.classList.contains('deep-work')) {
+            // sync edge case
+            isDeepWork = true;
+        }
+    });
+    
+    // ------------------------------
+    // 11. PWA service worker
     // ------------------------------
     if ('serviceWorker' in navigator) {
         const fakeSW = "self.addEventListener('fetch', event => {});";
