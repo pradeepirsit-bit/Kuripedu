@@ -3,10 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Firebase Collaboration (Fixed)</title>
-    <!-- Quill Editor CSS -->
+    <title>Kuripedu · Firebase Collab (Fixed)</title>
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -47,7 +45,7 @@
         </div>
         <div id="editorContainer"></div>
         <div class="sync-panel">
-            <div><span><i class="fas fa-globe"></i> Mode: </span><span id="modeStatus" class="status-badge">🟡 Initializing...</span></div>
+            <div><span><i class="fas fa-globe"></i> Mode: </span><span id="modeStatus" class="status-badge">🟡 Loading...</span></div>
             <div><button id="shareLinkBtn"><i class="fas fa-link"></i> Copy Room Link</button><button id="showQrBtn"><i class="fas fa-qrcode"></i> Show QR</button></div>
             <div id="qrContainer" class="qr-area"><div id="qrcode"></div><small>Share this link</small></div>
         </div>
@@ -55,195 +53,242 @@
     </div>
 </div>
 
-<!-- Load Firebase SDK first (global) -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+<!-- Scripts loaded sequentially with error catching -->
+<script>
+    // Helper to load scripts in order
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            const script = document.createElement('script');
+            script.src = src;
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error(`Failed to load ${src}`));
+            document.head.appendChild(script);
+        });
+    }
 
-<!-- Load Yjs and providers from CDN (global) -->
-<script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
-<script src="https://unpkg.com/y-quill@0.2.0/dist/y-quill.js"></script>
-<script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    // Load dependencies one by one
+    Promise.resolve()
+        .then(() => loadScript('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js'))
+        .then(() => loadScript('https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js'))
+        .then(() => loadScript('https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js'))
+        .then(() => loadScript('https://cdn.quilljs.com/1.3.7/quill.min.js'))
+        .then(() => loadScript('https://unpkg.com/y-quill@0.2.0/dist/y-quill.js'))
+        .then(() => loadScript('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js'))
+        .then(() => {
+            // All scripts loaded, now start the app
+            startApp();
+        })
+        .catch(err => {
+            console.error("Script loading error:", err);
+            document.getElementById('modeStatus').innerHTML = '🔴 Failed to load libraries';
+            document.getElementById('modeStatus').style.background = '#ef4444';
+        });
+</script>
 
 <script>
-    // Your Firebase config
-    const firebaseConfig = {
-        apiKey: "AIzaSyBR_HZdIaIFWxCPR0gKwaAswsbKofPHzMQ",
-        authDomain: "kuripedu-533ce.firebaseapp.com",
-        projectId: "kuripedu-533ce",
-        storageBucket: "kuripedu-533ce.firebasestorage.app",
-        messagingSenderId: "758703500345",
-        appId: "1:758703500345:web:4ed50a1f0c260efa4ab1e8"
-    };
-
-    // Initialize Firebase
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-
-    // Room ID from URL
-    const urlParams = new URLSearchParams(window.location.search);
-    let roomName = urlParams.get('room');
-    if (!roomName) {
-        roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('room', roomName);
-        window.history.replaceState({}, '', newUrl);
-    }
-
-    // Setup Yjs document and Quill
-    const ydoc = new Y.Doc();
-    const quill = new Quill('#editorContainer', {
-        theme: 'snow',
-        modules: { toolbar: [['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['link', 'clean']] }
-    });
-    const binding = new QuillBinding(quill, ydoc.getText('quill'));
-
-    // Use Firestore as persistence layer (simple approach)
-    // We'll store the Yjs document updates in Firestore
-    const docRef = db.collection('notes').doc(roomName);
-    
-    // Load initial content from Firestore
-    docRef.get().then(doc => {
-        if (doc.exists && doc.data().content) {
-            // Apply updates from Firestore
-            const updates = doc.data().updates || [];
-            updates.forEach(update => {
-                Y.applyUpdate(ydoc, new Uint8Array(update));
-            });
+    function startApp() {
+        // Now Y and Quill are guaranteed to be defined
+        if (typeof Y === 'undefined') {
+            console.error("Yjs still not defined after loading");
+            return;
         }
-    });
+        if (typeof Quill === 'undefined') {
+            console.error("Quill still not defined");
+            return;
+        }
 
-    // Listen for real-time changes from Firestore
-    docRef.onSnapshot(snapshot => {
-        if (snapshot.exists && snapshot.data().updates) {
-            const updates = snapshot.data().updates;
-            updates.forEach(update => {
-                Y.applyUpdate(ydoc, new Uint8Array(update));
-            });
-        }
-    });
+        // Firebase config
+        const firebaseConfig = {
+            apiKey: "AIzaSyBR_HZdIaIFWxCPR0gKwaAswsbKofPHzMQ",
+            authDomain: "kuripedu-533ce.firebaseapp.com",
+            projectId: "kuripedu-533ce",
+            storageBucket: "kuripedu-533ce.firebasestorage.app",
+            messagingSenderId: "758703500345",
+            appId: "1:758703500345:web:4ed50a1f0c260efa4ab1e8"
+        };
 
-    // When local changes happen, store them in Firestore
-    ydoc.on('update', async (update) => {
-        const updateArray = Array.from(update);
-        const docSnap = await docRef.get();
-        let existingUpdates = [];
-        if (docSnap.exists && docSnap.data().updates) {
-            existingUpdates = docSnap.data().updates;
-        }
-        existingUpdates.push(updateArray);
-        // Keep only last 50 updates to avoid huge documents (optional)
-        if (existingUpdates.length > 50) existingUpdates = existingUpdates.slice(-50);
-        await docRef.set({ updates: existingUpdates, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-    });
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
 
-    // Status indicator
-    document.getElementById('modeStatus').innerHTML = '🟢 Live Collab (Firestore)';
-    document.getElementById('modeStatus').style.background = '#10b981';
+        // Room ID from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        let roomName = urlParams.get('room');
+        if (!roomName) {
+            roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('room', roomName);
+            window.history.replaceState({}, '', newUrl);
+        }
 
-    // Auto-save to localStorage (backup) & stats
-    const STORAGE_KEY = 'kuripedu_firebase_backup';
-    function updateStats() {
-        const text = quill.getText();
-        const words = text.trim().split(/\s+/).filter(w => w.length).length;
-        document.getElementById('wordCount').innerText = words;
-        document.getElementById('charCount').innerText = text.length;
-    }
-    function saveBackup() {
-        localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
-        updateStats();
-        const statusSpan = document.querySelector('.status-bar span:first-child');
-        if (statusSpan) {
-            const original = statusSpan.innerHTML;
-            statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
-            setTimeout(() => { statusSpan.innerHTML = original; }, 1000);
+        // Setup Yjs document and Quill
+        const ydoc = new Y.Doc();
+        const quill = new Quill('#editorContainer', {
+            theme: 'snow',
+            modules: { toolbar: [['bold', 'italic', 'underline'], [{ list: 'ordered' }, { list: 'bullet' }], ['link', 'clean']] }
+        });
+        const binding = new QuillBinding(quill, ydoc.getText('quill'));
+
+        // Firestore reference
+        const docRef = db.collection('notes').doc(roomName);
+
+        // Load existing updates from Firestore
+        docRef.get().then(doc => {
+            if (doc.exists && doc.data().updates) {
+                const updates = doc.data().updates;
+                updates.forEach(updateData => {
+                    Y.applyUpdate(ydoc, new Uint8Array(updateData));
+                });
+            }
+        }).catch(err => console.warn("Error loading initial data:", err));
+
+        // Listen for real-time changes from Firestore
+        docRef.onSnapshot(snapshot => {
+            if (snapshot.exists && snapshot.data().updates) {
+                const updates = snapshot.data().updates;
+                updates.forEach(updateData => {
+                    Y.applyUpdate(ydoc, new Uint8Array(updateData));
+                });
+            }
+        }, err => console.warn("Snapshot error:", err));
+
+        // When local changes happen, store them in Firestore (debounced)
+        let pendingUpdate = false;
+        ydoc.on('update', async (update) => {
+            if (pendingUpdate) return;
+            pendingUpdate = true;
+            setTimeout(async () => {
+                try {
+                    const updateArray = Array.from(update);
+                    const docSnap = await docRef.get();
+                    let existingUpdates = [];
+                    if (docSnap.exists && docSnap.data().updates) {
+                        existingUpdates = docSnap.data().updates;
+                    }
+                    existingUpdates.push(updateArray);
+                    // Keep only last 100 updates to avoid huge doc
+                    if (existingUpdates.length > 100) existingUpdates = existingUpdates.slice(-100);
+                    await docRef.set({ updates: existingUpdates, lastUpdated: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                } catch (err) {
+                    console.warn("Error saving update:", err);
+                } finally {
+                    pendingUpdate = false;
+                }
+            }, 100);
+        });
+
+        // Update UI status
+        document.getElementById('modeStatus').innerHTML = '🟢 Live Collab (Firestore)';
+        document.getElementById('modeStatus').style.background = '#10b981';
+
+        // Auto-save to localStorage (backup) & stats
+        const STORAGE_KEY = 'kuripedu_firebase_backup';
+        function updateStats() {
+            const text = quill.getText();
+            const words = text.trim().split(/\s+/).filter(w => w.length).length;
+            document.getElementById('wordCount').innerText = words;
+            document.getElementById('charCount').innerText = text.length;
         }
-    }
-    quill.on('text-change', saveBackup);
-    
-    function loadFromLocal() {
-        const saved = localStorage.getItem(STORAGE_KEY);
-        if (saved && saved !== '<p><br></p>') {
-            quill.root.innerHTML = saved;
-        } else {
-            quill.setText('✨ Welcome to Kuripedu with Firebase ✨\n\n• Share this URL with a friend.\n• Everything you type will sync in real-time.\n• Click "Deep Work" for fullscreen focus.\n\nHappy co-writing!');
+        function saveBackup() {
+            localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
+            updateStats();
+            const statusSpan = document.querySelector('.status-bar span:first-child');
+            if (statusSpan) {
+                const original = statusSpan.innerHTML;
+                statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
+                setTimeout(() => { statusSpan.innerHTML = original; }, 1000);
+            }
         }
-        updateStats();
-    }
-    loadFromLocal();
-    setInterval(saveBackup, 10000);
-    
-    // Theme, font, deep work, export, share link, QR (same as before)
-    document.getElementById('themeBtn').addEventListener('click', () => {
-        const themes = ['light', 'dark', 'sepia'];
-        let idx = localStorage.getItem('themeIdx') ? parseInt(localStorage.getItem('themeIdx')) : 0;
-        idx = (idx + 1) % 3;
-        document.body.classList.remove('dark', 'sepia');
-        if (themes[idx] === 'dark') document.body.classList.add('dark');
-        if (themes[idx] === 'sepia') document.body.classList.add('sepia');
-        localStorage.setItem('themeIdx', idx);
-    });
-    const savedIdx = localStorage.getItem('themeIdx');
-    if (savedIdx === '1') document.body.classList.add('dark');
-    if (savedIdx === '2') document.body.classList.add('sepia');
-    
-    const fontSelect = document.getElementById('fontSelect');
-    const lineSelect = document.getElementById('lineHeightSelect');
-    function applyStyle() {
-        const editor = document.querySelector('.ql-editor');
-        if (editor) { editor.style.fontSize = fontSelect.value; editor.style.lineHeight = lineSelect.value; }
-    }
-    fontSelect.addEventListener('change', applyStyle);
-    lineSelect.addEventListener('change', applyStyle);
-    setTimeout(applyStyle, 100);
-    
-    document.getElementById('exportBtn').addEventListener('click', () => {
-        const content = quill.root.innerHTML;
-        const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title></head><body>${content}</body></html>`], { type: 'text/html' });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kuripedu_${Date.now()}.html`; a.click(); URL.revokeObjectURL(a.href);
-    });
-    
-    let isDeep = false;
-    document.getElementById('deepWorkBtn').addEventListener('click', () => {
-        if (!isDeep) { document.body.classList.add('deep-work'); document.documentElement.requestFullscreen(); isDeep = true; }
-        else { document.body.classList.remove('deep-work'); document.exitFullscreen(); isDeep = false; }
-    });
-    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isDeep) { document.body.classList.remove('deep-work'); isDeep = false; } });
-    
-    // Share link & QR code
-    const shareBtn = document.getElementById('shareLinkBtn');
-    const qrBtn = document.getElementById('showQrBtn');
-    const qrContainer = document.getElementById('qrContainer');
-    const qrDiv = document.getElementById('qrcode');
-    
-    function getRoomUrl() {
-        let url = new URL(window.location.href);
-        url.searchParams.set('room', roomName);
-        return url.toString();
-    }
-    
-    shareBtn.addEventListener('click', () => {
-        navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied!'));
-    });
-    
-    let qrShown = false;
-    qrBtn.addEventListener('click', async () => {
-        if (!qrShown) {
-            qrContainer.style.display = 'block';
-            qrDiv.innerHTML = '';
-            const url = getRoomUrl();
-            QRCode.toCanvas(qrDiv, url, { width: 120, margin: 1 }, function (error) {
-                if (error) console.error(error);
-            });
-            qrShown = true;
-            qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
-        } else {
-            qrContainer.style.display = 'none';
-            qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
-            qrShown = false;
+        quill.on('text-change', saveBackup);
+        
+        function loadFromLocal() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved && saved !== '<p><br></p>') {
+                quill.root.innerHTML = saved;
+            } else {
+                quill.setText('✨ Welcome to Kuripedu with Firebase ✨\n\n• Share this URL with a friend.\n• Everything you type will sync in real-time.\n• Click "Deep Work" for fullscreen focus.\n\nHappy co-writing!');
+            }
+            updateStats();
         }
-    });
+        loadFromLocal();
+        setInterval(saveBackup, 10000);
+        
+        // --- UI Controls (Theme, Font, Deep Work, Export, Share, QR) ---
+        document.getElementById('themeBtn').addEventListener('click', () => {
+            const themes = ['light', 'dark', 'sepia'];
+            let idx = localStorage.getItem('themeIdx') ? parseInt(localStorage.getItem('themeIdx')) : 0;
+            idx = (idx + 1) % 3;
+            document.body.classList.remove('dark', 'sepia');
+            if (themes[idx] === 'dark') document.body.classList.add('dark');
+            if (themes[idx] === 'sepia') document.body.classList.add('sepia');
+            localStorage.setItem('themeIdx', idx);
+        });
+        const savedIdx = localStorage.getItem('themeIdx');
+        if (savedIdx === '1') document.body.classList.add('dark');
+        if (savedIdx === '2') document.body.classList.add('sepia');
+        
+        const fontSelect = document.getElementById('fontSelect');
+        const lineSelect = document.getElementById('lineHeightSelect');
+        function applyStyle() {
+            const editor = document.querySelector('.ql-editor');
+            if (editor) { editor.style.fontSize = fontSelect.value; editor.style.lineHeight = lineSelect.value; }
+        }
+        fontSelect.addEventListener('change', applyStyle);
+        lineSelect.addEventListener('change', applyStyle);
+        setTimeout(applyStyle, 100);
+        
+        document.getElementById('exportBtn').addEventListener('click', () => {
+            const content = quill.root.innerHTML;
+            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title></head><body>${content}</body></html>`], { type: 'text/html' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `kuripedu_${Date.now()}.html`; a.click(); URL.revokeObjectURL(a.href);
+        });
+        
+        let isDeep = false;
+        document.getElementById('deepWorkBtn').addEventListener('click', () => {
+            if (!isDeep) { document.body.classList.add('deep-work'); document.documentElement.requestFullscreen(); isDeep = true; }
+            else { document.body.classList.remove('deep-work'); document.exitFullscreen(); isDeep = false; }
+        });
+        document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && isDeep) { document.body.classList.remove('deep-work'); isDeep = false; } });
+        
+        // Share link & QR code
+        const shareBtn = document.getElementById('shareLinkBtn');
+        const qrBtn = document.getElementById('showQrBtn');
+        const qrContainer = document.getElementById('qrContainer');
+        const qrDiv = document.getElementById('qrcode');
+        
+        function getRoomUrl() {
+            let url = new URL(window.location.href);
+            url.searchParams.set('room', roomName);
+            return url.toString();
+        }
+        
+        shareBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied!'));
+        });
+        
+        let qrShown = false;
+        qrBtn.addEventListener('click', async () => {
+            if (!qrShown) {
+                qrContainer.style.display = 'block';
+                qrDiv.innerHTML = '';
+                const url = getRoomUrl();
+                // QRCode is now global from the script
+                if (typeof QRCode !== 'undefined') {
+                    QRCode.toCanvas(qrDiv, url, { width: 120, margin: 1 }, function (error) {
+                        if (error) console.error("QR error:", error);
+                    });
+                } else {
+                    qrDiv.innerHTML = '<p>QR library missing</p>';
+                }
+                qrShown = true;
+                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
+            } else {
+                qrContainer.style.display = 'none';
+                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
+                qrShown = false;
+            }
+        });
+    }
 </script>
 </body>
 </html>
