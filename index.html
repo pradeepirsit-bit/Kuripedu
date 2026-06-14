@@ -14,7 +14,6 @@
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
     <!-- QR Code -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <!-- y-quill binding -->
     <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
@@ -55,7 +54,7 @@
             transition: background 0.2s, color 0.2s;
             padding: 1rem;
         }
-        /* Deep Work Mode: hide all UI except editor */
+        /* DEEP WORK MODE: hide everything except the editor */
         body.deep-work .notepad-header,
         body.deep-work .sync-panel,
         body.deep-work .status-bar,
@@ -87,31 +86,7 @@
         body.deep-work .simple-table-wrapper .table-inline-toolbar {
             display: none !important;
         }
-        /* reading mode */
-        body.read-mode .editor-container,
-        body.read-mode .ql-toolbar,
-        body.read-mode .custom-toolbar,
-        body.read-mode .status-bar,
-        body.read-mode .collab-bar,
-        body.read-mode .sync-panel {
-            display: none !important;
-        }
-        body.read-mode .reading-view {
-            display: block !important;
-        }
-        .reading-view {
-            display: none;
-            max-width: 900px;
-            margin: 2rem auto;
-            padding: 2rem;
-            background: var(--bg-panel);
-            border-radius: 1.5rem;
-            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
-            font-family: 'Georgia', 'Times New Roman', serif;
-            line-height: var(--reading-line-height, 1.7);
-            font-size: var(--reading-font-size, 1.1rem);
-        }
-        .reading-view .ql-editor { padding: 0; }
+        /* normal styles */
         .app-container { max-width: 1400px; margin: 0 auto; }
         .notepad-card {
             background: var(--bg-panel);
@@ -282,7 +257,6 @@
             <h1><i class="fas fa-pen-fancy"></i> Kuripedu <span style="font-size:0.9rem;">(குறிப்பேடு)</span></h1>
             <div class="toolbar-group">
                 <button id="deepWorkBtn"><i class="fas fa-brain"></i> Deep Work</button>
-                <button id="readModeBtn"><i class="fas fa-glasses"></i> Focus Read</button>
                 <button id="themeToggleBtn"><i class="fas fa-palette"></i> Theme</button>
                 <select id="fontSelect">
                     <option value="1rem">Font Size: Normal</option>
@@ -324,7 +298,6 @@
             <span><i class="fas fa-shield-alt"></i> End‑to‑end encrypted</span>
         </div>
     </div>
-    <div class="reading-view" id="readingView"></div>
 </div>
 
 <script>
@@ -378,7 +351,7 @@
                 const values = data.values || Array(rows).fill().map(() => Array(cols).fill(''));
                 let html = `<table class="simple-table" contenteditable="false">`;
                 if (hasHeader && headers.length === cols) {
-                    html += `<thead></tr>`;
+                    html += `<thead><tr>`;
                     for (let c=0; c<cols; c++) {
                         html += `<th contenteditable="true" data-col="${c}">${escapeHtml(String(headers[c]))}</th>`;
                     }
@@ -562,7 +535,7 @@
             updateStats();
         }
 
-        // ---------- 5. UI Controls (all debugged) ----------
+        // ---------- 5. UI Controls ----------
         // Theme
         let themeIdx = 0;
         const themes = ['light', 'dark', 'sepia'];
@@ -590,25 +563,6 @@
         fontSelect.addEventListener('change', applyEditorStyle);
         lineSelect.addEventListener('change', applyEditorStyle);
         applyEditorStyle();
-
-        // Focus Read mode
-        const readBtn = document.getElementById('readModeBtn');
-        const readingView = document.getElementById('readingView');
-        function updateReadingView() {
-            readingView.innerHTML = quill.root.innerHTML;
-            readingView.style.fontFamily = 'Georgia, serif';
-            readingView.style.lineHeight = lineSelect.value;
-            readingView.style.fontSize = fontSelect.value;
-        }
-        readBtn.addEventListener('click', () => {
-            document.body.classList.toggle('read-mode');
-            if (document.body.classList.contains('read-mode')) {
-                updateReadingView();
-                readBtn.innerHTML = '<i class="fas fa-edit"></i> Exit Read Mode';
-            } else {
-                readBtn.innerHTML = '<i class="fas fa-glasses"></i> Focus Read';
-            }
-        });
 
         // Export
         document.getElementById('exportHtmlBtn').addEventListener('click', () => {
@@ -641,39 +595,51 @@
             }
         });
 
-        // Deep Work mode + fullscreen
+        // ---------- 6. Deep Work Mode (fullscreen + hide UI) ----------
         const deepBtn = document.getElementById('deepWorkBtn');
         let isDeep = false;
-        function toggleDeep() {
+        function toggleDeepWork() {
             if (!isDeep) {
+                // Enter deep work: hide UI and request fullscreen
                 document.body.classList.add('deep-work');
-                document.documentElement.requestFullscreen?.().catch(e=>console.warn(e));
+                const elem = document.documentElement;
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen().catch(err => console.warn('Fullscreen error:', err));
+                }
                 deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
                 isDeep = true;
             } else {
+                // Exit deep work: restore UI and exit fullscreen
                 document.body.classList.remove('deep-work');
-                document.exitFullscreen?.().catch(e=>console.warn(e));
+                if (document.exitFullscreen) {
+                    document.exitFullscreen().catch(err => console.warn('Exit fullscreen error:', err));
+                }
                 deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
             }
         }
-        deepBtn.addEventListener('click', toggleDeep);
+        deepBtn.addEventListener('click', toggleDeepWork);
+        // If user presses ESC to exit fullscreen, ensure UI comes back
         document.addEventListener('fullscreenchange', () => {
             if (!document.fullscreenElement && isDeep) {
+                // Fullscreen was exited externally (ESC)
                 document.body.classList.remove('deep-work');
                 deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
                 isDeep = false;
+            } else if (document.fullscreenElement && !isDeep && document.body.classList.contains('deep-work')) {
+                // sync edge case
+                isDeep = true;
             }
         });
 
-        // ---------- 6. PWA service worker (optional) ----------
+        // ---------- 7. PWA service worker (optional) ----------
         if ('serviceWorker' in navigator) {
             const fakeSW = "self.addEventListener('fetch', event => {});";
             const blobSw = new Blob([fakeSW], {type: 'application/javascript'});
             navigator.serviceWorker.register(URL.createObjectURL(blobSw)).catch(e=>console.log("SW optional"));
         }
 
-        // ---------- 7. Start everything ----------
+        // ---------- 8. Start everything ----------
         window.addEventListener('load', () => {
             loadFromLocal();
             initCollab();
