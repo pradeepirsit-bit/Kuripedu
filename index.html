@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kuripedu · Collaborative Notepad (QR fixed)</title>
+    <title>Kuripedu · Collaborative Notepad (Fully Fixed)</title>
     <!-- Quill Editor -->
     <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
     <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
-    <!-- Yjs + Collaboration Providers -->
+    <!-- Yjs + Collaboration Providers (load order matters) -->
     <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
-    <!-- QR Code library (more reliable) -->
+    <!-- QR Code library -->
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
@@ -81,7 +81,6 @@
             color: white;
             border-color: var(--accent);
         }
-        .editor-wrapper { padding: 1rem 1.5rem 1.5rem; }
         #quillEditor { min-height: 450px; }
         .ql-container { font-size: 0.95rem; }
         .sync-panel {
@@ -111,10 +110,6 @@
             width: fit-content;
             text-align: center;
         }
-        .qr-area canvas, .qr-area img {
-            display: block;
-            margin: 0 auto;
-        }
         .status-bar {
             padding: 0.6rem 1.5rem;
             border-top: 1px solid var(--border);
@@ -125,6 +120,17 @@
         @media (max-width: 700px) {
             .notepad-header { flex-direction: column; align-items: stretch; }
         }
+        /* Deep work styles (applied via JS) */
+        body.deep-work .notepad-header,
+        body.deep-work .sync-panel,
+        body.deep-work .status-bar,
+        body.deep-work .ql-toolbar {
+            display: none !important;
+        }
+        body.deep-work #quillEditor { min-height: 100vh !important; }
+        body.deep-work .ql-container { border: none !important; font-size: 1.2rem; }
+        body.deep-work .app-container { max-width: 100% !important; margin: 0 !important; }
+        body.deep-work .notepad-card { border-radius: 0 !important; border: none !important; box-shadow: none !important; }
     </style>
 </head>
 <body>
@@ -172,261 +178,266 @@
 </div>
 
 <script>
-    (function() {
-        // ------------------------------
-        // 1. Get or create a room ID from URL (shareable)
-        // ------------------------------
-        const urlParams = new URLSearchParams(window.location.search);
-        let roomName = urlParams.get('room');
-        if (!roomName) {
-            roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
-            const newUrl = new URL(window.location.href);
-            newUrl.searchParams.set('room', roomName);
-            window.history.replaceState({}, '', newUrl);
+    // Wait for DOM and all external scripts to be ready
+    window.addEventListener('DOMContentLoaded', function() {
+        // Check if required globals exist
+        function dependenciesReady() {
+            return (typeof Y !== 'undefined' && 
+                    typeof YWebRTC !== 'undefined' && 
+                    typeof Quill !== 'undefined' && 
+                    typeof QuillBinding !== 'undefined' &&
+                    typeof QRCode !== 'undefined');
         }
-
-        // ------------------------------
-        // 2. Initialize Quill and Yjs
-        // ------------------------------
-        const ydoc = new Y.Doc();
-        const quill = new Quill('#quillEditor', {
-            theme: 'snow',
-            placeholder: 'Start writing – changes appear in real time!\nOpen this page in another browser window to test collaboration.',
-            modules: {
-                toolbar: [
-                    [{ 'header': [1, 2, 3, false] }],
-                    ['bold', 'italic', 'underline', 'strike'],
-                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                    ['link', 'clean']
-                ]
+        
+        if (!dependenciesReady()) {
+            console.warn("Waiting for libraries...");
+            setTimeout(function checkAgain() {
+                if (dependenciesReady()) {
+                    initApp();
+                } else {
+                    setTimeout(checkAgain, 100);
+                }
+            }, 100);
+            return;
+        }
+        
+        initApp();
+        
+        function initApp() {
+            // ------------------------------
+            // 1. Room ID from URL or generate
+            // ------------------------------
+            const urlParams = new URLSearchParams(window.location.search);
+            let roomName = urlParams.get('room');
+            if (!roomName) {
+                roomName = 'kuripedu-' + Math.random().toString(36).substring(2, 10);
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('room', roomName);
+                window.history.replaceState({}, '', newUrl);
             }
-        });
-        const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
-
-        // ------------------------------
-        // 3. Collaboration: YWebRTC with multiple fallback signaling servers
-        // ------------------------------
-        const signalingServers = [
-            'wss://y-webrtc-signaling-eu.herokuapp.com',
-            'wss://y-webrtc-signaling-us.herokuapp.com',
-            'wss://signaling.yjs.dev'
-        ];
-        let provider = null;
-        let currentServerIndex = 0;
-        let isConnected = false;
-
-        function tryNextSignalingServer() {
-            if (provider) {
-                try { provider.disconnect(); provider.destroy(); } catch(e) {}
-            }
-            if (currentServerIndex >= signalingServers.length) {
-                document.getElementById('roomStatus').innerHTML = '🔴 No server available';
-                document.getElementById('roomStatus').style.background = '#ef4444';
-                return;
-            }
-            const server = signalingServers[currentServerIndex];
-            console.log(`Trying signaling server: ${server}`);
-            document.getElementById('roomStatus').innerHTML = `🟡 Trying ${server.split('/')[2]}...`;
-            document.getElementById('roomStatus').style.background = '#eab308';
-            try {
-                provider = new YWebRTC(roomName, ydoc, { signaling: [server] });
-                provider.on('status', (status) => {
-                    if (status.connected) {
-                        isConnected = true;
-                        document.getElementById('roomStatus').innerHTML = '🟢 Connected';
-                        document.getElementById('roomStatus').style.background = '#10b981';
-                    }
-                });
-                provider.on('peers', (peers) => {
-                    document.getElementById('peerCount').innerText = peers.size;
-                });
-                provider.on('connection-error', (err) => {
-                    console.warn(`Signaling server ${server} failed:`, err);
+            
+            // ------------------------------
+            // 2. Quill + Yjs binding
+            // ------------------------------
+            const ydoc = new Y.Doc();
+            const quill = new Quill('#quillEditor', {
+                theme: 'snow',
+                placeholder: 'Start writing – changes appear in real time!\nOpen this page in another browser window to test collaboration.',
+                modules: {
+                    toolbar: [
+                        [{ 'header': [1, 2, 3, false] }],
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                        ['link', 'clean']
+                    ]
+                }
+            });
+            const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
+            
+            // ------------------------------
+            // 3. Collaboration with fallback signaling servers
+            // ------------------------------
+            const signalingServers = [
+                'wss://y-webrtc-signaling-eu.herokuapp.com',
+                'wss://y-webrtc-signaling-us.herokuapp.com',
+                'wss://signaling.yjs.dev'
+            ];
+            let provider = null;
+            let currentServerIndex = 0;
+            let isConnected = false;
+            
+            function tryNextSignalingServer() {
+                if (provider) {
+                    try { provider.disconnect(); provider.destroy(); } catch(e) {}
+                }
+                if (currentServerIndex >= signalingServers.length) {
+                    document.getElementById('roomStatus').innerHTML = '🔴 No server available';
+                    document.getElementById('roomStatus').style.background = '#ef4444';
+                    return;
+                }
+                const server = signalingServers[currentServerIndex];
+                console.log(`Trying signaling server: ${server}`);
+                document.getElementById('roomStatus').innerHTML = `🟡 Trying ${server.split('/')[2]}...`;
+                document.getElementById('roomStatus').style.background = '#eab308';
+                try {
+                    provider = new YWebRTC(roomName, ydoc, { signaling: [server] });
+                    provider.on('status', (status) => {
+                        if (status.connected) {
+                            isConnected = true;
+                            document.getElementById('roomStatus').innerHTML = '🟢 Connected';
+                            document.getElementById('roomStatus').style.background = '#10b981';
+                        }
+                    });
+                    provider.on('peers', (peers) => {
+                        document.getElementById('peerCount').innerText = peers.size;
+                    });
+                    provider.on('connection-error', (err) => {
+                        console.warn(`Signaling server ${server} failed:`, err);
+                        currentServerIndex++;
+                        tryNextSignalingServer();
+                    });
+                } catch(e) {
+                    console.warn(e);
                     currentServerIndex++;
                     tryNextSignalingServer();
-                });
-            } catch(e) {
-                console.warn(e);
-                currentServerIndex++;
-                tryNextSignalingServer();
-            }
-        }
-        tryNextSignalingServer();
-
-        // ------------------------------
-        // 4. Local backup & word/char count (auto-save)
-        // ------------------------------
-        const STORAGE_KEY = 'kuripedu_backup';
-        function updateStats() {
-            const text = quill.getText();
-            const words = text.trim().split(/\s+/).filter(w => w.length).length;
-            document.getElementById('wordCount').innerText = words;
-            document.getElementById('charCount').innerText = text.length;
-        }
-        function saveBackup() {
-            localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
-            updateStats();
-            const statusSpan = document.querySelector('.status-bar span:first-child');
-            if (statusSpan) {
-                const original = statusSpan.innerHTML;
-                statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
-                setTimeout(() => { if(statusSpan) statusSpan.innerHTML = original; }, 1000);
-            }
-        }
-        quill.on('text-change', saveBackup);
-        function loadBackup() {
-            const saved = localStorage.getItem(STORAGE_KEY);
-            if (saved && saved !== '<p><br></p>') {
-                quill.root.innerHTML = saved;
-            } else {
-                quill.setText('✨ Real-time Collaboration Active ✨\n\n• Open this page in another browser window (or incognito mode).\n• Both windows will sync instantly.\n• Share the link or QR code below to invite others.\n• If no one joins, you’re still writing offline.\n\nHappy co-writing!');
-            }
-            updateStats();
-        }
-        loadBackup();
-        setInterval(saveBackup, 10000);
-
-        // ------------------------------
-        // 5. Theme switcher (light / dark / sepia)
-        // ------------------------------
-        let themeIdx = 0;
-        const themes = ['light', 'dark', 'sepia'];
-        const savedTheme = localStorage.getItem('kuripedu_theme');
-        if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx = 1; }
-        if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx = 2; }
-        document.getElementById('themeBtn').addEventListener('click', () => {
-            themeIdx = (themeIdx + 1) % 3;
-            document.body.classList.remove('dark', 'sepia');
-            if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
-            if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
-            localStorage.setItem('kuripedu_theme', themes[themeIdx]);
-        });
-
-        // ------------------------------
-        // 6. Font size & line height
-        // ------------------------------
-        const fontSelect = document.getElementById('fontSelect');
-        const lineSelect = document.getElementById('lineHeightSelect');
-        function applyEditorStyle() {
-            const editor = document.querySelector('.ql-editor');
-            if (editor) {
-                editor.style.fontSize = fontSelect.value;
-                editor.style.lineHeight = lineSelect.value;
-            }
-        }
-        fontSelect.addEventListener('change', applyEditorStyle);
-        lineSelect.addEventListener('change', applyEditorStyle);
-        setTimeout(applyEditorStyle, 100);
-
-        // ------------------------------
-        // 7. Export as HTML
-        // ------------------------------
-        document.getElementById('exportBtn').addEventListener('click', () => {
-            const content = quill.root.innerHTML;
-            const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title><style>body{font-family:sans-serif;padding:2rem;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], { type: 'text/html' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `kuripedu_${Date.now()}.html`;
-            a.click();
-            URL.revokeObjectURL(a.href);
-        });
-
-        // ------------------------------
-        // 8. Deep Work Mode (fullscreen + hide UI)
-        // ------------------------------
-        let isDeep = false;
-        const deepBtn = document.getElementById('deepWorkBtn');
-        function toggleDeepWork() {
-            if (!isDeep) {
-                document.body.classList.add('deep-work');
-                const elem = document.documentElement;
-                if (elem.requestFullscreen) elem.requestFullscreen().catch(e => console.warn(e));
-                deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
-                isDeep = true;
-            } else {
-                document.body.classList.remove('deep-work');
-                if (document.exitFullscreen) document.exitFullscreen().catch(e => console.warn(e));
-                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
-                isDeep = false;
-            }
-        }
-        deepBtn.addEventListener('click', toggleDeepWork);
-        document.addEventListener('fullscreenchange', () => {
-            if (!document.fullscreenElement && isDeep) {
-                document.body.classList.remove('deep-work');
-                deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
-                isDeep = false;
-            }
-        });
-
-        // Additional CSS for deep work (hide UI)
-        const style = document.createElement('style');
-        style.textContent = `
-            body.deep-work .notepad-header,
-            body.deep-work .sync-panel,
-            body.deep-work .status-bar,
-            body.deep-work .ql-toolbar {
-                display: none !important;
-            }
-            body.deep-work .editor-wrapper { padding: 0 !important; }
-            body.deep-work #quillEditor { min-height: 100vh !important; }
-            body.deep-work .ql-container { border: none !important; font-size: 1.2rem; }
-            body.deep-work .app-container { max-width: 100% !important; margin: 0 !important; }
-            body.deep-work .notepad-card { border-radius: 0 !important; border: none !important; box-shadow: none !important; }
-        `;
-        document.head.appendChild(style);
-
-        // ------------------------------
-        // 9. Share Link & QR Code (FIXED: QR shows reliably)
-        // ------------------------------
-        const shareBtn = document.getElementById('shareLinkBtn');
-        const qrBtn = document.getElementById('showQrBtn');
-        const qrContainer = document.getElementById('qrContainer');
-        const qrDiv = document.getElementById('qrcode');
-        
-        function getRoomUrl() {
-            let url = new URL(window.location.href);
-            url.searchParams.set('room', roomName);
-            return url.toString();
-        }
-        
-        shareBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied! Share it with others.')).catch(() => alert('Copy manually: ' + getRoomUrl()));
-        });
-        
-        let qrGenerated = false;
-        qrBtn.addEventListener('click', () => {
-            if (qrContainer.style.display === 'none' || !qrContainer.style.display) {
-                qrContainer.style.display = 'block';
-                if (!qrGenerated) {
-                    // Clear previous content
-                    qrDiv.innerHTML = '';
-                    // Use QRCode constructor correctly (the library expects a DOM element and options)
-                    // The library qrcodejs attaches to window.QRCode.
-                    try {
-                        new QRCode(qrDiv, {
-                            text: getRoomUrl(),
-                            width: 120,
-                            height: 120,
-                            colorDark: "#000000",
-                            colorLight: "#ffffff",
-                            correctLevel: QRCode.CorrectLevel.H
-                        });
-                        qrGenerated = true;
-                        console.log("QR code generated successfully");
-                    } catch(e) {
-                        console.error("QR generation error:", e);
-                        qrDiv.innerHTML = '<p style="color:red;">QR failed, but link works: <br><small>' + getRoomUrl() + '</small></p>';
-                    }
                 }
-                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
-            } else {
-                qrContainer.style.display = 'none';
-                qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
             }
-        });
-        qrContainer.style.display = 'none';
-    })();
+            tryNextSignalingServer();
+            
+            // ------------------------------
+            // 4. Local backup & stats
+            // ------------------------------
+            const STORAGE_KEY = 'kuripedu_backup';
+            function updateStats() {
+                const text = quill.getText();
+                const words = text.trim().split(/\s+/).filter(w => w.length).length;
+                document.getElementById('wordCount').innerText = words;
+                document.getElementById('charCount').innerText = text.length;
+            }
+            function saveBackup() {
+                localStorage.setItem(STORAGE_KEY, quill.root.innerHTML);
+                updateStats();
+                const statusSpan = document.querySelector('.status-bar span:first-child');
+                if (statusSpan) {
+                    const original = statusSpan.innerHTML;
+                    statusSpan.innerHTML = '<i class="fas fa-check"></i> Saved';
+                    setTimeout(() => { if(statusSpan) statusSpan.innerHTML = original; }, 1000);
+                }
+            }
+            quill.on('text-change', saveBackup);
+            function loadBackup() {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved && saved !== '<p><br></p>') {
+                    quill.root.innerHTML = saved;
+                } else {
+                    quill.setText('✨ Real-time Collaboration Active ✨\n\n• Open this page in another browser window (or incognito mode).\n• Both windows will sync instantly.\n• Share the link or QR code below to invite others.\n• If no one joins, you’re still writing offline.\n\nHappy co-writing!');
+                }
+                updateStats();
+            }
+            loadBackup();
+            setInterval(saveBackup, 10000);
+            
+            // ------------------------------
+            // 5. Theme
+            // ------------------------------
+            let themeIdx = 0;
+            const themes = ['light', 'dark', 'sepia'];
+            const savedTheme = localStorage.getItem('kuripedu_theme');
+            if (savedTheme === 'dark') { document.body.classList.add('dark'); themeIdx = 1; }
+            if (savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIdx = 2; }
+            document.getElementById('themeBtn').addEventListener('click', () => {
+                themeIdx = (themeIdx + 1) % 3;
+                document.body.classList.remove('dark', 'sepia');
+                if (themes[themeIdx] === 'dark') document.body.classList.add('dark');
+                if (themes[themeIdx] === 'sepia') document.body.classList.add('sepia');
+                localStorage.setItem('kuripedu_theme', themes[themeIdx]);
+            });
+            
+            // ------------------------------
+            // 6. Font & line height
+            // ------------------------------
+            const fontSelect = document.getElementById('fontSelect');
+            const lineSelect = document.getElementById('lineHeightSelect');
+            function applyEditorStyle() {
+                const editor = document.querySelector('.ql-editor');
+                if (editor) {
+                    editor.style.fontSize = fontSelect.value;
+                    editor.style.lineHeight = lineSelect.value;
+                }
+            }
+            fontSelect.addEventListener('change', applyEditorStyle);
+            lineSelect.addEventListener('change', applyEditorStyle);
+            setTimeout(applyEditorStyle, 100);
+            
+            // ------------------------------
+            // 7. Export
+            // ------------------------------
+            document.getElementById('exportBtn').addEventListener('click', () => {
+                const content = quill.root.innerHTML;
+                const blob = new Blob([`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu Export</title><style>body{font-family:sans-serif;padding:2rem;}</style></head><body><h1>📝 Kuripedu Export</h1>${content}</body></html>`], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = `kuripedu_${Date.now()}.html`;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            });
+            
+            // ------------------------------
+            // 8. Deep Work Mode
+            // ------------------------------
+            let isDeep = false;
+            const deepBtn = document.getElementById('deepWorkBtn');
+            function toggleDeepWork() {
+                if (!isDeep) {
+                    document.body.classList.add('deep-work');
+                    const elem = document.documentElement;
+                    if (elem.requestFullscreen) elem.requestFullscreen().catch(e => console.warn(e));
+                    deepBtn.innerHTML = '<i class="fas fa-undo-alt"></i> Exit Deep Work';
+                    isDeep = true;
+                } else {
+                    document.body.classList.remove('deep-work');
+                    if (document.exitFullscreen) document.exitFullscreen().catch(e => console.warn(e));
+                    deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                    isDeep = false;
+                }
+            }
+            deepBtn.addEventListener('click', toggleDeepWork);
+            document.addEventListener('fullscreenchange', () => {
+                if (!document.fullscreenElement && isDeep) {
+                    document.body.classList.remove('deep-work');
+                    deepBtn.innerHTML = '<i class="fas fa-brain"></i> Deep Work';
+                    isDeep = false;
+                }
+            });
+            
+            // ------------------------------
+            // 9. Share Link & QR Code (fixed)
+            // ------------------------------
+            const shareBtn = document.getElementById('shareLinkBtn');
+            const qrBtn = document.getElementById('showQrBtn');
+            const qrContainer = document.getElementById('qrContainer');
+            const qrDiv = document.getElementById('qrcode');
+            
+            function getRoomUrl() {
+                let url = new URL(window.location.href);
+                url.searchParams.set('room', roomName);
+                return url.toString();
+            }
+            
+            shareBtn.addEventListener('click', () => {
+                navigator.clipboard.writeText(getRoomUrl()).then(() => alert('Room link copied! Share it with others.')).catch(() => alert('Copy manually: ' + getRoomUrl()));
+            });
+            
+            let qrGenerated = false;
+            qrBtn.addEventListener('click', () => {
+                if (qrContainer.style.display === 'none' || !qrContainer.style.display) {
+                    qrContainer.style.display = 'block';
+                    if (!qrGenerated) {
+                        qrDiv.innerHTML = '';
+                        try {
+                            new QRCode(qrDiv, {
+                                text: getRoomUrl(),
+                                width: 120,
+                                height: 120,
+                                colorDark: "#000000",
+                                colorLight: "#ffffff",
+                                correctLevel: QRCode.CorrectLevel.H
+                            });
+                            qrGenerated = true;
+                        } catch(e) {
+                            console.error("QR error:", e);
+                            qrDiv.innerHTML = '<p style="color:red;">QR failed, but link works:<br><small>' + getRoomUrl() + '</small></p>';
+                        }
+                    }
+                    qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Hide QR';
+                } else {
+                    qrContainer.style.display = 'none';
+                    qrBtn.innerHTML = '<i class="fas fa-qrcode"></i> Show QR';
+                }
+            });
+            qrContainer.style.display = 'none';
+        }
+    });
 </script>
 </body>
 </html>
