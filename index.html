@@ -1,363 +1,694 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ta">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bike Roar Rater - TFJS On-Device</title>
-    
-    <!-- Load TensorFlow.js -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@1.3.1/dist/tf.min.js"></script>
-    <!-- Load Teachable Machine Audio Extension (Handles complex FFT/Spectrogram math automatically) -->
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/speech-commands@0.4.0/dist/speech-commands.min.js"></script>
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Kuripedu · குறிப்பேடு</title>
+    <!-- PWA manifest -->
+    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22Kuripedu%22,%22short_name%22:%22Kuripedu%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22#0f172a%22,%22theme_color%22:%22#3b82f6%22,%22icons%22:[{%22src%22:%22data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' fill='%233b82f6'/%3E%3Ctext x='50' y='67' font-size='50' text-anchor='middle' fill='white'%3EK%3C/text%3E%3C/svg%3E%22,%22sizes%22:%22any%22,%22type%22:%22image/svg+xml%22}]}">
+    <!-- Yjs + Y-WebRTC -->
+    <script src="https://cdn.jsdelivr.net/npm/yjs@13.6.15/dist/y.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/y-webrtc@10.2.5/dist/y-webrtc.min.js"></script>
+    <!-- Quill -->
+    <link href="https://cdn.quilljs.com/1.3.7/quill.snow.css" rel="stylesheet">
+    <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
+    <!-- QR Code -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
-            --primary: #ff4500;
-            --secondary: #222;
-            --bg: #0a0a0a;
-            --text: #ffffff;
-            --accent: #00ff7f;
+            --bg-body: #f8fafc;
+            --bg-panel: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #475569;
+            --border: #e2e8f0;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --toolbar-bg: #ffffffcc;
+            --table-header: #f1f5f9;
         }
-
+        body.dark {
+            --bg-body: #0f172a;
+            --bg-panel: #1e293b;
+            --text-main: #f1f5f9;
+            --text-muted: #94a3b8;
+            --border: #334155;
+            --toolbar-bg: #1e293bcc;
+            --table-header: #334155;
+        }
+        body.sepia {
+            --bg-body: #fbf7e9;
+            --bg-panel: #fef9e6;
+            --text-main: #4a3b2c;
+            --text-muted: #6b5a48;
+            --border: #e2d5b6;
+            --toolbar-bg: #fef9e6cc;
+            --table-header: #f0e5cf;
+        }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
+            background: var(--bg-body);
+            color: var(--text-main);
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            transition: background 0.2s, color 0.2s;
+            padding: 1rem;
+        }
+        body.read-mode .editor-container,
+        body.read-mode .ql-toolbar,
+        body.read-mode .custom-toolbar,
+        body.read-mode .status-bar,
+        body.read-mode .collab-bar,
+        body.read-mode .sync-panel {
+            display: none !important;
+        }
+        body.read-mode .reading-view {
+            display: block !important;
+        }
+        .reading-view {
+            display: none;
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 2rem;
+            background: var(--bg-panel);
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);
+            font-family: 'Georgia', 'Times New Roman', serif;
+            line-height: var(--reading-line-height, 1.7);
+            font-size: var(--reading-font-size, 1.1rem);
+        }
+        .reading-view .ql-editor { padding: 0; }
+        .app-container { max-width: 1400px; margin: 0 auto; }
+        .notepad-card {
+            background: var(--bg-panel);
+            border-radius: 2rem;
+            border: 1px solid var(--border);
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.02);
+        }
+        .notepad-header {
+            padding: 1rem 1.8rem;
+            border-bottom: 1px solid var(--border);
             display: flex;
-            flex-direction: column;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+        h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .toolbar-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        button, .btn-like {
+            background: var(--toolbar-bg);
+            border: 1px solid var(--border);
+            padding: 0.4rem 0.9rem;
+            border-radius: 2rem;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-main);
+            transition: 0.1s;
+            display: inline-flex;
+            gap: 0.4rem;
+            align-items: center;
+        }
+        button:hover {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        .ql-container { font-size: 0.95rem; }
+        .editor-wrapper { padding: 1rem 1.8rem 1.5rem; }
+        .simple-table-wrapper { margin: 0.8rem 0; overflow-x: auto; }
+        .simple-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-panel);
+        }
+        .simple-table th, .simple-table td {
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            text-align: left;
+            vertical-align: top;
+            min-width: 80px;
+        }
+        .simple-table th {
+            background: var(--table-header);
+            font-weight: 600;
+        }
+        .simple-table [contenteditable="true"] {
+            outline: none;
+            cursor: text;
+        }
+        .table-inline-toolbar {
+            display: flex;
+            gap: 0.4rem;
+            margin-top: 0.5rem;
+            justify-content: flex-end;
+        }
+        .table-inline-toolbar button {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.6rem;
+        }
+        .status-bar, .collab-bar {
+            padding: 0.5rem 1.8rem;
+            font-size: 0.75rem;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .sync-panel {
+            background: var(--bg-panel);
+            border-radius: 1rem;
+            padding: 0.75rem;
+            margin: 0.5rem 1.8rem 1rem;
+            border: 1px solid var(--border);
+        }
+        .qr-container {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        #qrcode { background: white; padding: 0.5rem; border-radius: 0.75rem; }
+        .badge {
+            background: var(--accent);
+            color: white;
+            border-radius: 1rem;
+            padding: 0.2rem 0.6rem;
+            font-size: 0.7rem;
+        }
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
+            z-index: 1000;
+        }
+        .modal-card {
+            background: var(--bg-panel);
+            border-radius: 1.5rem;
+            padding: 1.5rem;
+            width: 320px;
+            border: 1px solid var(--border);
+            box-shadow: 0 20px 30px -10px rgba(0,0,0,0.2);
+        }
+        .modal-card input, .modal-card label {
+            margin: 0.5rem 0;
+            display: block;
+        }
+        .modal-card input[type="number"] {
+            width: 100%;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            border: 1px solid var(--border);
+            background: var(--bg-panel);
+            color: var(--text-main);
+        }
+        .modal-card .checkbox-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin: 0.8rem 0;
+        }
+        .checkbox-row input {
+            width: auto;
             margin: 0;
-            text-align: center;
         }
-
-        .container {
-            background-color: var(--secondary);
-            padding: 2.5rem;
-            border-radius: 20px;
-            box-shadow: 0 15px 40px rgba(255, 69, 0, 0.15);
-            width: 90%;
-            max-width: 450px;
-            position: relative;
-            overflow: hidden;
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-top: 1rem;
         }
-
-        /* Top highlight bar */
-        .container::before {
-            content: '';
-            position: absolute;
-            top: 0; left: 0; right: 0;
-            height: 5px;
-            background: linear-gradient(90deg, var(--primary), var(--accent));
+        @media (max-width: 700px) {
+            .notepad-header { flex-direction: column; align-items: stretch; }
         }
-
-        h1 { margin-top: 0; color: var(--primary); text-transform: uppercase; letter-spacing: 2px; }
-        p { color: #aaaaaa; font-size: 0.95rem; margin-bottom: 25px; }
-
-        #record-btn {
-            background: linear-gradient(145deg, #ff5722, #e63e00);
-            color: white;
-            border: none;
-            border-radius: 50%;
-            width: 90px; height: 90px;
-            font-size: 32px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 8px 20px rgba(255, 69, 0, 0.4);
-            margin: 10px auto 25px auto;
-            display: flex; align-items: center; justify-content: center;
-        }
-
-        #record-btn:active { transform: scale(0.9); }
-        
-        #record-btn.recording {
-            background: #dc143c;
-            animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
-        }
-
-        @keyframes pulse-ring {
-            0% { box-shadow: 0 0 0 0 rgba(220, 20, 60, 0.7); }
-            70% { box-shadow: 0 0 0 25px rgba(220, 20, 60, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(220, 20, 60, 0); }
-        }
-
-        /* Progress Bar for the 5s capture */
-        .progress-container { width: 100%; height: 6px; background: #333; border-radius: 3px; margin-bottom: 15px; display: none; overflow: hidden; }
-        .progress-bar { height: 100%; width: 0%; background: var(--primary); transition: width 0.1s linear; }
-
-        .results { display: none; animation: slideUp 0.5s ease-out forwards; border-top: 1px solid #333; padding-top: 20px; }
-        
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .score-box { background: rgba(0,0,0,0.4); padding: 15px; border-radius: 12px; margin-bottom: 15px; }
-        .score-display { font-size: 4rem; font-weight: 900; color: var(--accent); margin: 0; line-height: 1; text-shadow: 0 0 15px rgba(0,255,127,0.3); }
-        .bonus-text { font-size: 0.8rem; color: #ffeb3b; margin-top: 5px; }
-
-        .bike-badge {
-            display: inline-block; padding: 6px 12px; border-radius: 6px;
-            background: #333; font-weight: bold; font-size: 1.1rem; margin: 10px 0;
-            border-left: 4px solid var(--primary);
-        }
-
-        .trash-talk {
-            font-size: 1.1rem; font-style: italic; background: rgba(255,255,255,0.05);
-            padding: 15px; border-radius: 8px; margin-top: 10px; border: 1px solid #444;
-        }
-
-        #status { color: #888; font-size: 0.9rem; font-weight: 500; height: 20px; }
     </style>
 </head>
 <body>
-
-    <div class="container">
-        <h1>Roar Rater</h1>
-        <p>100% On-Device AI Architecture</p>
-        
-        <button id="record-btn">🎤</button>
-        
-        <div class="progress-container" id="progress-container">
-            <div class="progress-bar" id="progress-bar"></div>
-        </div>
-        
-        <div id="status">Tap mic to load AI and record</div>
-
-        <div class="results" id="results-card">
-            <div class="score-box">
-                <div style="font-size: 0.9rem; color:#aaa; text-transform:uppercase; letter-spacing:1px;">Final Roar Score</div>
-                <div class="score-display" id="roar-score">0</div>
-                <div class="bonus-text" id="bonus-text">+0 Character Bonus</div>
+<div class="app-container">
+    <div class="notepad-card">
+        <div class="notepad-header">
+            <h1><i class="fas fa-pen-fancy"></i> Kuripedu <span style="font-size:0.9rem;">(குறிப்பேடு)</span></h1>
+            <div class="toolbar-group">
+                <button id="readModeBtn"><i class="fas fa-glasses"></i> Focus Read</button>
+                <button id="themeToggleBtn"><i class="fas fa-palette"></i> Theme</button>
+                <select id="fontSelect">
+                    <option value="1rem">Font Size: Normal</option>
+                    <option value="1.2rem">Large</option>
+                    <option value="1.4rem">X-Large</option>
+                </select>
+                <select id="lineHeightSelect">
+                    <option value="1.5">Line H: 1.5</option>
+                    <option value="1.7" selected>1.7</option>
+                    <option value="2">2.0</option>
+                </select>
+                <button id="exportHtmlBtn"><i class="fas fa-download"></i> Export</button>
             </div>
-            
-            <div><span class="bike-badge" id="bike-class">Analyzing...</span></div>
-            <div class="trash-talk" id="trash-talk-text"></div>
+        </div>
+        <div class="editor-wrapper">
+            <div id="quillEditor" style="min-height: 400px;"></div>
+            <div style="margin-top: 0.8rem;">
+                <button id="insertTableBtn" class="btn-like"><i class="fas fa-border-all"></i> Insert Table (rows/cols + header toggle)</button>
+            </div>
+        </div>
+        <div class="sync-panel">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap:wrap;">
+                <span><i class="fas fa-users"></i> CRDT Collaboration (WebRTC) </span>
+                <span id="roomStatus" class="badge">🟢 Room: kuripedu</span>
+                <button id="shareRoomBtn"><i class="fas fa-link"></i> Copy share link</button>
+                <button id="showQrBtn"><i class="fas fa-qrcode"></i> Show sync QR</button>
+            </div>
+            <div id="qrSyncArea" style="display: none; margin-top: 1rem;" class="qr-container">
+                <div id="qrcode"></div>
+                <div><small>Scan QR to join this room (E2EE via WebRTC).<br>Tables sync live – editing is smooth.</small></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <span><i class="fas fa-sync-alt"></i> Auto-save: <span id="saveStatus">synced</span></span>
+            <span><i class="fas fa-chart-line"></i> Words: <span id="wordCount">0</span> | Chars: <span id="charCount">0</span></span>
+        </div>
+        <div class="collab-bar">
+            <span><i class="fas fa-user-friends"></i> <span id="peerCount">0</span> peer(s) editing</span>
+            <span><i class="fas fa-shield-alt"></i> End‑to‑end encrypted</span>
         </div>
     </div>
+    <div class="reading-view" id="readingView"></div>
+</div>
 
-    <script>
-        // --- 1. CONFIGURATION ---
-        // REPLACE this URL with your own Teachable Machine Audio model link once you train it!
-        // Example: "https://teachablemachine.withgoogle.com/models/YOUR_MODEL_ID/"
-        const URL = "https://teachablemachine.withgoogle.com/models/placeholder/"; 
-        
-        const RECORD_DURATION_MS = 5000; // 5 seconds
-        
-        // Trash Talk Engine (Tamil-English)
-        const trashTalkTemplates = {
-            low: [
-                "Enna ba, mixer grinder sound kekuthu! 😂",
-                "TVS 50 ah idhu? Needs more throat! 🛵",
-                "Sathame illa... Cycle otlama ba? 🚲"
-            ],
-            medium: [
-                "Not bad, aana innum konjam raw power thevai! 🏍️",
-                "Decent ah irukku, but where is the bass man? 🤔",
-                "KTM Duke vibes, pulling out okay! 🔥"
-            ],
-            high: [
-                "Verithanam! Pure muscle! 💥",
-                "Therikkavidalama! That's a beast roaring! 🦁",
-                "Kaantha kural! Royal Enfield thozha! 👑"
-            ]
-        };
-
-        // UI Elements
-        const recordBtn = document.getElementById('record-btn');
-        const statusText = document.getElementById('status');
-        const resultsCard = document.getElementById('results-card');
-        const roarScoreEl = document.getElementById('roar-score');
-        const bikeClassEl = document.getElementById('bike-class');
-        const trashTalkEl = document.getElementById('trash-talk-text');
-        const bonusTextEl = document.getElementById('bonus-text');
-        const progressContainer = document.getElementById('progress-container');
-        const progressBar = document.getElementById('progress-bar');
-
-        // State Variables
-        let isRecording = false;
-        let recognizer;
-        let audioContext;
-        let analyser;
-        let microphone;
-        let maxVolume = 0;
-        let detectedClass = "Unknown";
-        let maxConfidence = 0;
-        let progressInterval;
-
-        // --- 2. TFJS MODEL LOADING ---
-        async function createModel() {
-            const checkpointURL = URL + "model.json"; // model topology
-            const metadataURL = URL + "metadata.json"; // model metadata
-
-            try {
-                const recognizer = speechCommands.create(
-                    "BROWSER_FFT", // Fourier transform type
-                    undefined,     // speech commands vocabulary feature
-                    checkpointURL,
-                    metadataURL
-                );
-                // check that model and metadata are loaded
-                await recognizer.ensureModelLoaded();
-                return recognizer;
-            } catch (e) {
-                console.warn("Real TFJS model not found. Falling back to Mock Engine for UI testing.");
-                return null; // Return null to trigger the graceful fallback demo
-            }
+<script src="https://cdn.jsdelivr.net/npm/y-quill@0.2.0/dist/y-quill.min.js"></script>
+<script>
+    // ------------------------------
+    // 1. Custom Blot: Smooth Table Editing (no re-render on input)
+    // ------------------------------
+    const BlockEmbed = Quill.import('blots/block/embed');
+    
+    class SmoothTableBlot extends BlockEmbed {
+        static create(data) {
+            const node = super.create();
+            node.classList.add('simple-table-wrapper');
+            node.setAttribute('data-table-id', 'tbl-' + Date.now() + '-' + Math.random());
+            this.renderTable(node, data);
+            return node;
         }
-
-        // --- 3. CORE LOGIC ---
-        recordBtn.addEventListener('click', async () => {
-            if (isRecording) return;
+        
+        static renderTable(container, data) {
+            const rows = data.rows || 2;
+            const cols = data.cols || 2;
+            const hasHeader = data.hasHeader !== undefined ? data.hasHeader : true;
+            const headers = data.headers || (hasHeader ? Array(cols).fill().map((_, i) => `Header ${i+1}`) : []);
+            const values = data.values || Array(rows).fill().map(() => Array(cols).fill(''));
             
-            resultsCard.style.display = 'none';
-            statusText.innerText = 'Loading TFJS Model into memory...';
+            let html = `<table class="simple-table" contenteditable="false">`;
             
-            // Lazy load model on first click
-            if (!recognizer && recognizer !== null) {
-                recognizer = await createModel();
+            if (hasHeader && headers.length === cols) {
+                html += `<thead><tr>`;
+                for (let c=0; c<cols; c++) {
+                    const headerVal = headers[c] !== undefined ? headers[c] : `Header ${c+1}`;
+                    html += `<th contenteditable="true" data-col="${c}">${escapeHtml(String(headerVal))}</th>`;
+                }
+                html += `</thead>`;
             }
-
-            startPipeline();
-        });
-
-        async function startPipeline() {
-            try {
-                // Request raw microphone access for decibel calculation
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                setupDecibelTracker(stream);
-
-                isRecording = true;
-                recordBtn.classList.add('recording');
-                progressContainer.style.display = 'block';
-                progressBar.style.width = '0%';
-                statusText.innerText = 'Listening... Rev the engine!';
-
-                // Start Progress Bar
-                let elapsed = 0;
-                progressInterval = setInterval(() => {
-                    elapsed += 100;
-                    progressBar.style.width = (elapsed / RECORD_DURATION_MS) * 100 + '%';
-                }, 100);
-
-                // If real TFJS model loaded, start classifying in real time
-                if (recognizer) {
-                    const classLabels = recognizer.wordLabels(); 
-                    recognizer.listen(result => {
-                        // Find highest confidence class during this window
-                        let scores = result.scores;
-                        let highestIndex = scores.indexOf(Math.max(...scores));
-                        
-                        if (scores[highestIndex] > maxConfidence) {
-                            maxConfidence = scores[highestIndex];
-                            detectedClass = classLabels[highestIndex];
-                        }
-                    }, {
-                        includeSpectrogram: false,
-                        probabilityThreshold: 0.75,
-                        invokeCallbackOnNoiseAndUnknown: true,
-                        overlapFactor: 0.50
+            
+            html += `<tbody>`;
+            for (let i=0; i<rows; i++) {
+                html += `<tr>`;
+                for (let j=0; j<cols; j++) {
+                    const cellValue = (values[i] && values[i][j] !== undefined) ? values[i][j] : '';
+                    html += `<td contenteditable="true" data-row="${i}" data-col="${j}">${escapeHtml(String(cellValue))}</td>`;
+                }
+                html += `</tr>`;
+            }
+            html += `</tbody></table><div class="table-inline-toolbar">
+                        <button class="add-table-row">➕ Add Row</button>
+                        <button class="add-table-col">➕ Add Column</button>
+                    </div>`;
+            container.innerHTML = html;
+            
+            // Helper: extract current data from DOM (without re-rendering)
+            const getCurrentData = () => {
+                const table = container.querySelector('.simple-table');
+                if (!table) return { rows, cols, hasHeader, headers, values };
+                const currentRows = table.querySelectorAll('tbody tr').length;
+                const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
+                const hasHeaderNow = (table.querySelector('thead') !== null);
+                let currentHeaders = [];
+                if (hasHeaderNow) {
+                    table.querySelectorAll('thead th').forEach(th => {
+                        currentHeaders.push(th.innerText);
                     });
                 }
-
-                // Stop after 5 seconds
-                setTimeout(() => {
-                    stopPipeline(stream);
-                }, RECORD_DURATION_MS);
-
-            } catch (err) {
-                console.error(err);
-                statusText.innerText = "Error: Microphone permission denied.";
-            }
-        }
-
-        function setupDecibelTracker(stream) {
-            audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            analyser = audioContext.createAnalyser();
-            microphone = audioContext.createMediaStreamSource(stream);
-            microphone.connect(analyser);
-            analyser.fftSize = 256;
+                const currentValues = [];
+                for (let i=0; i<currentRows; i++) {
+                    const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
+                    const rowVals = [];
+                    for (let j=0; j<currentCols; j++) {
+                        if (rowCells[j]) rowVals.push(rowCells[j].innerText);
+                        else rowVals.push('');
+                    }
+                    currentValues.push(rowVals);
+                }
+                return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
+            };
             
-            const bufferLength = analyser.frequencyBinCount;
-            const dataArray = new Uint8Array(bufferLength);
-            maxVolume = 0;
-
-            function track() {
-                if (!isRecording) return;
-                analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for (let i = 0; i < bufferLength; i++) { sum += dataArray[i]; }
-                let avg = sum / bufferLength;
-                if (avg > maxVolume) maxVolume = avg; // Track peak volume
-                requestAnimationFrame(track);
-            }
-            track();
-        }
-
-        function stopPipeline(stream) {
-            isRecording = false;
-            clearInterval(progressInterval);
-            recordBtn.classList.remove('recording');
-            progressContainer.style.display = 'none';
-            statusText.innerText = 'Processing completely on-device...';
-
-            // Clean up Audio Context
-            stream.getTracks().forEach(track => track.stop());
-            if (audioContext && audioContext.state !== 'closed') {
-                audioContext.close();
-            }
-            if (recognizer) {
-                recognizer.stopListening();
-            }
-
-            calculateAndShowResults();
-        }
-
-        function calculateAndShowResults() {
-            // 1. Calculate Base Decibel Score (Mapping peak volume 0-255 to 0-85)
-            let baseScore = Math.min(85, Math.round((maxVolume / 255) * 85 * 1.5)); 
-            if (baseScore < 10) baseScore = Math.floor(Math.random() * 20) + 10; 
-
-            // 2. Handle AI Bike Classification & Character Bonus
-            let characterBonus = 0;
-
-            // If the user hasn't put in their real Teachable Machine URL yet, Mock the AI
-            if (!recognizer) {
-                if (baseScore > 75) { detectedClass = "Royal Enfield Classic 350"; maxConfidence = 0.92; }
-                else if (baseScore > 50) { detectedClass = "KTM Duke 390"; maxConfidence = 0.85; }
-                else { detectedClass = "TVS XL Super"; maxConfidence = 0.78; }
-            }
-
-            // Assign Bonus based on AI Output (The "Character" Bonus from your architecture)
-            if (detectedClass.includes("Royal Enfield")) characterBonus = 15;
-            else if (detectedClass.includes("KTM")) characterBonus = 10;
-            else if (detectedClass.includes("Yamaha")) characterBonus = 8;
-            else characterBonus = 2; // Commuter bikes get low bonus
-
-            // 3. Final Roar Score Calculation
-            let finalScore = Math.min(100, baseScore + characterBonus);
-
-            // 4. Update UI
-            roarScoreEl.innerText = finalScore;
-            bonusTextEl.innerText = `+${characterBonus} Character Bonus (${detectedClass})`;
-            bikeClassEl.innerText = `${detectedClass} (Confidence: ${Math.round(maxConfidence * 100)}%)`;
+            // Update data model without re-rendering (just store and notify Quill)
+            const syncDataWithoutRender = () => {
+                const newData = getCurrentData();
+                const blot = Quill.find(container);
+                if (blot) {
+                    blot.storedData = newData;
+                    blot.updateData(newData, { skipRender: true });
+                }
+            };
             
-            // 5. Fire Trash Talk Engine
-            let category = 'low';
-            if (finalScore > 75) category = 'high';
-            else if (finalScore > 40) category = 'medium';
-
-            const phrases = trashTalkTemplates[category];
-            trashTalkEl.innerText = phrases[Math.floor(Math.random() * phrases.length)];
-
-            resultsCard.style.display = 'block';
-            statusText.innerText = 'Tap mic to test another bike!';
+            // Only sync on blur (when user leaves the cell) – no re-render on input
+            const editableCells = container.querySelectorAll('[contenteditable="true"]');
+            editableCells.forEach(cell => {
+                cell.removeEventListener('blur', syncDataWithoutRender);
+                cell.addEventListener('blur', syncDataWithoutRender);
+            });
             
-            // Reset state for next run
-            maxConfidence = 0;
-            detectedClass = "Unknown";
+            // Add row/col buttons (these DO re-render because structure changes)
+            const addRowBtn = container.querySelector('.add-table-row');
+            const addColBtn = container.querySelector('.add-table-col');
+            if (addRowBtn) {
+                addRowBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    let curr = getCurrentData();
+                    curr.rows++;
+                    curr.values.push(new Array(curr.cols).fill(''));
+                    SmoothTableBlot.renderTable(container, curr);
+                    SmoothTableBlot.notifyUpdate(container, curr);
+                };
+            }
+            if (addColBtn) {
+                addColBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    let curr = getCurrentData();
+                    curr.cols++;
+                    if (curr.hasHeader) {
+                        curr.headers.push(`Header ${curr.cols}`);
+                    }
+                    for (let i=0; i<curr.rows; i++) {
+                        curr.values[i].push('');
+                    }
+                    SmoothTableBlot.renderTable(container, curr);
+                    SmoothTableBlot.notifyUpdate(container, curr);
+                };
+            }
         }
-    </script>
+        
+        static notifyUpdate(container, data) {
+            const blot = Quill.find(container);
+            if (blot && blot.updateData) blot.updateData(data);
+        }
+        
+        updateData(data, options = {}) {
+            this.storedData = data;
+            if (!options.skipRender) {
+                SmoothTableBlot.renderTable(this.domNode, data);
+            }
+            this.domNode.setAttribute('data-table-json', JSON.stringify(data));
+        }
+        
+        static value(domNode) {
+            const container = domNode;
+            const table = container.querySelector('.simple-table');
+            if (!table) return { rows: 2, cols: 2, hasHeader: true, headers: ['Header 1','Header 2'], values: [['',''],['','']] };
+            const currentRows = table.querySelectorAll('tbody tr').length;
+            const currentCols = table.querySelectorAll('tbody tr:first-child td, thead th').length;
+            const hasHeaderNow = (table.querySelector('thead') !== null);
+            let currentHeaders = [];
+            if (hasHeaderNow) {
+                table.querySelectorAll('thead th').forEach(th => currentHeaders.push(th.innerText));
+            }
+            const currentValues = [];
+            for (let i=0; i<currentRows; i++) {
+                const rowCells = table.querySelectorAll(`tbody tr:nth-child(${i+1}) td`);
+                const rowVals = [];
+                for (let j=0; j<currentCols; j++) {
+                    rowVals.push(rowCells[j] ? rowCells[j].innerText : '');
+                }
+                currentValues.push(rowVals);
+            }
+            return { rows: currentRows, cols: currentCols, hasHeader: hasHeaderNow, headers: currentHeaders, values: currentValues };
+        }
+        
+        static blotName = 'smoothTable';
+        static tagName = 'div';
+        static className = 'smooth-table-blot';
+    }
+    SmoothTableBlot.blotName = 'smoothTable';
+    SmoothTableBlot.tagName = 'div';
+    SmoothTableBlot.className = 'smooth-table-blot';
+    Quill.register(SmoothTableBlot);
+    
+    function escapeHtml(str) { return str.replace(/[&<>]/g, function(m){if(m==='&') return '&amp;'; if(m==='<') return '&lt;'; if(m==='>') return '&gt;'; return m;});}
+    
+    // ------------------------------
+    // 2. Quill initialization & image drag-drop
+    // ------------------------------
+    const quill = new Quill('#quillEditor', {
+        theme: 'snow',
+        placeholder: 'Write anything... Drag & drop images. Use "Insert Table" – editing cells is now smooth, no pop-out.',
+        modules: {
+            toolbar: [
+                [{ 'header': [1,2,3,false] }],
+                ['bold', 'italic', 'underline', 'strike'],
+                [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+                ['link', 'image', 'code-block'],
+                ['clean']
+            ]
+        }
+    });
+    // Drag & drop images
+    const editorDiv = document.querySelector('#quillEditor');
+    editorDiv.addEventListener('dragover', (e) => e.preventDefault());
+    editorDiv.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const files = e.dataTransfer.files;
+        if (files && files[0] && files[0].type.startsWith('image/')) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const range = quill.getSelection(true);
+                quill.insertEmbed(range.index, 'image', ev.target.result);
+            };
+            reader.readAsDataURL(files[0]);
+        }
+    });
+    
+    // ------------------------------
+    // 3. Table insertion modal (rows, cols, header toggle)
+    // ------------------------------
+    function showTableModal() {
+        const modal = document.createElement('div');
+        modal.className = 'modal-overlay';
+        modal.innerHTML = `
+            <div class="modal-card">
+                <h3>Insert Table</h3>
+                <label>Rows (data rows):</label>
+                <input type="number" id="tableRows" min="1" max="20" value="3">
+                <label>Columns:</label>
+                <input type="number" id="tableCols" min="1" max="20" value="3">
+                <div class="checkbox-row">
+                    <input type="checkbox" id="includeHeader" checked>
+                    <label for="includeHeader" style="margin:0;">Include header row (editable)</label>
+                </div>
+                <div class="modal-actions">
+                    <button id="modalCancel">Cancel</button>
+                    <button id="modalInsert" style="background: var(--accent); color:white;">Insert</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+        const rowsInput = modal.querySelector('#tableRows');
+        const colsInput = modal.querySelector('#tableCols');
+        const includeHeaderCheck = modal.querySelector('#includeHeader');
+        const cancelBtn = modal.querySelector('#modalCancel');
+        const insertBtn = modal.querySelector('#modalInsert');
+        const closeModal = () => modal.remove();
+        cancelBtn.onclick = closeModal;
+        insertBtn.onclick = () => {
+            let rows = parseInt(rowsInput.value, 10);
+            let cols = parseInt(colsInput.value, 10);
+            if (isNaN(rows)) rows = 2;
+            if (isNaN(cols)) cols = 2;
+            rows = Math.min(20, Math.max(1, rows));
+            cols = Math.min(20, Math.max(1, cols));
+            const hasHeader = includeHeaderCheck.checked;
+            const headers = hasHeader ? Array(cols).fill().map((_, i) => `Header ${i+1}`) : [];
+            const values = Array(rows).fill().map(() => Array(cols).fill(''));
+            const initialData = { rows, cols, hasHeader, headers, values };
+            const range = quill.getSelection(true);
+            quill.insertEmbed(range.index, 'smoothTable', initialData, Quill.sources.USER);
+            closeModal();
+        };
+    }
+    document.getElementById('insertTableBtn').addEventListener('click', showTableModal);
+    
+    // ------------------------------
+    // 4. CRDT Collaboration (Yjs + WebRTC)
+    // ------------------------------
+    const ydoc = new Y.Doc();
+    const binding = new QuillBinding(quill, ydoc.getText('quill'), null);
+    let provider = null;
+    const roomName = 'kuripedu-' + (new URLSearchParams(location.search).get('room') || 'default');
+    function initCollab() {
+        provider = new YWebRTC(roomName, ydoc, { signaling: ['wss://signaling.yjs.dev'] });
+        provider.on('peers', (peers) => {
+            document.getElementById('peerCount').innerText = peers.size;
+        });
+        provider.on('status', (status) => {
+            document.getElementById('roomStatus').innerHTML = status.connected ? '🟢 Connected' : '🔴 Offline';
+        });
+    }
+    
+    // Auto-save to localStorage
+    function saveToLocal() {
+        const content = quill.root.innerHTML;
+        localStorage.setItem('kuripedu_data', content);
+        document.getElementById('saveStatus').innerText = 'saved';
+        setTimeout(() => { if(document.getElementById('saveStatus')) document.getElementById('saveStatus').innerText = 'synced'; }, 1000);
+        updateStats();
+    }
+    quill.on('text-change', () => { saveToLocal(); });
+    function loadFromLocal() {
+        const saved = localStorage.getItem('kuripedu_data');
+        if (saved && saved !== '<p><br></p>') {
+            quill.root.innerHTML = saved;
+        } else {
+            quill.setText('✨ Welcome to Kuripedu ✨\n\n📌 Click "Insert Table" → choose rows/cols + decide if you want a header row.\n✏️ Type inside any cell – no pop‑out, no flicker.\n📊 Add rows/columns with the buttons below each table.\n🖼️ Drag & drop images anywhere.\n👥 Share the room via QR code for real-time collaboration.');
+        }
+        updateStats();
+    }
+    function updateStats() {
+        const text = quill.getText();
+        const words = text.trim().split(/\s+/).filter(w=>w.length).length;
+        document.getElementById('wordCount').innerText = words;
+        document.getElementById('charCount').innerText = text.length;
+    }
+    
+    // ------------------------------
+    // 5. Distraction-free reading mode + fonts
+    // ------------------------------
+    const readModeBtn = document.getElementById('readModeBtn');
+    const readingView = document.getElementById('readingView');
+    function updateReadingView() {
+        readingView.innerHTML = quill.root.innerHTML;
+        readingView.style.fontFamily = 'Georgia, serif';
+        readingView.style.lineHeight = document.getElementById('lineHeightSelect').value;
+        readingView.style.fontSize = document.getElementById('fontSelect').value;
+    }
+    readModeBtn.addEventListener('click', () => {
+        document.body.classList.toggle('read-mode');
+        if (document.body.classList.contains('read-mode')) {
+            updateReadingView();
+            readModeBtn.innerHTML = '<i class="fas fa-edit"></i> Exit Read Mode';
+        } else {
+            readModeBtn.innerHTML = '<i class="fas fa-glasses"></i> Focus Read';
+        }
+    });
+    document.getElementById('fontSelect').addEventListener('change', (e) => {
+        document.documentElement.style.setProperty('--reading-font-size', e.target.value);
+        if(document.body.classList.contains('read-mode')) updateReadingView();
+    });
+    document.getElementById('lineHeightSelect').addEventListener('change', (e) => {
+        document.documentElement.style.setProperty('--reading-line-height', e.target.value);
+        if(document.body.classList.contains('read-mode')) updateReadingView();
+    });
+    
+    // ------------------------------
+    // 6. Theme switcher
+    // ------------------------------
+    let themeIndex = 0;
+    const themes = ['light', 'dark', 'sepia'];
+    document.getElementById('themeToggleBtn').addEventListener('click', () => {
+        themeIndex = (themeIndex+1)%3;
+        document.body.classList.remove('dark', 'sepia');
+        if(themes[themeIndex] === 'dark') document.body.classList.add('dark');
+        if(themes[themeIndex] === 'sepia') document.body.classList.add('sepia');
+        localStorage.setItem('themePref', themes[themeIndex]);
+    });
+    const savedTheme = localStorage.getItem('themePref');
+    if(savedTheme === 'dark') { document.body.classList.add('dark'); themeIndex=1; }
+    if(savedTheme === 'sepia') { document.body.classList.add('sepia'); themeIndex=2; }
+    
+    // ------------------------------
+    // 7. QR & share link
+    // ------------------------------
+    const shareRoomBtn = document.getElementById('shareRoomBtn');
+    const showQrBtn = document.getElementById('showQrBtn');
+    const qrArea = document.getElementById('qrSyncArea');
+    function getShareUrl() {
+        let url = new URL(window.location.href);
+        url.searchParams.set('room', roomName);
+        return url.toString();
+    }
+    shareRoomBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(getShareUrl());
+        alert('Collaboration link copied! Share to invite peers.');
+    });
+    showQrBtn.addEventListener('click', () => {
+        qrArea.style.display = qrArea.style.display === 'none' ? 'flex' : 'none';
+        if(qrArea.style.display === 'flex') {
+            document.getElementById('qrcode').innerHTML = '';
+            new QRCode(document.getElementById('qrcode'), {
+                text: getShareUrl(),
+                width: 120,
+                height: 120
+            });
+        }
+    });
+    
+    // ------------------------------
+    // 8. Export
+    // ------------------------------
+    document.getElementById('exportHtmlBtn').addEventListener('click', () => {
+        const fullDoc = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Kuripedu_Export</title><style>body{font-family:sans-serif;padding:2rem;} table, th, td {border:1px solid #ccc; border-collapse:collapse; padding:6px;} [contenteditable="true"]:focus{ outline: none;}</style></head><body><h1>📝 Kuripedu · Exported Note</h1>${quill.root.innerHTML}</body></html>`;
+        const blob = new Blob([fullDoc], {type: 'text/html'});
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `kuripedu_export_${Date.now()}.html`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    });
+    
+    // ------------------------------
+    // 9. PWA service worker
+    // ------------------------------
+    if ('serviceWorker' in navigator) {
+        const fakeSW = "self.addEventListener('fetch', event => {});";
+        const blobSw = new Blob([fakeSW], {type: 'application/javascript'});
+        const swUrl = URL.createObjectURL(blobSw);
+        navigator.serviceWorker.register(swUrl).catch(e=>console.log("PWA optional"));
+    }
+    
+    // Initialize
+    window.addEventListener('load', () => {
+        loadFromLocal();
+        initCollab();
+        setInterval(() => saveToLocal(), 3000);
+        updateStats();
+    });
+</script>
 </body>
 </html>
